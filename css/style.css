@@ -212,6 +212,7 @@ ul.haken li::before { content: "\2713"; position: absolute; left: 2px; color: va
 
 /* ---------- AgeLan-App eingebettet ---------- */
 .app-rahmen { display: flex; flex-direction: column; height: calc(100vh - 69px); }
+.app-rahmen iframe { min-height: 400px; }
 .app-leiste { background: #101116; border-bottom: 1px solid #25262c; }
 .app-leiste .zeile { gap: 4px; min-height: 44px; }
 .app-leiste a { color: var(--leise); font-weight: 600; padding: 10px 12px; }

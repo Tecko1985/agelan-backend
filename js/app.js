@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js?v=3";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=3";
+import { api, token, tokenSetzen, istDemo } from "./api.js?v=4";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=4";
 
 export const zustand = { daten: null, ich: null };
 
@@ -38,7 +38,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=3")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=4")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -72,11 +72,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=3")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=3")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=3")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=3")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=3")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=4")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=4")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=4")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=4")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=4")).render(m, p),
 };
 
 let aufraeumen = null;
@@ -131,7 +131,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=3");
+    const konto = await import("./konto.js?v=4");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -350,11 +350,7 @@ async function seiteApp(main, bereich) {
     localStorage.setItem("agelan_konto", JSON.stringify(konto));
     localStorage.setItem("agelan_tab", bereich);
   } catch (e) { /* privater Modus: dann fragt die App selbst nach der Anmeldung */ }
-  main.innerHTML = `<div class="app-rahmen">
-    <div class="app-leiste"><div class="wrap zeile">
-      ${BEREICHE.map(([b, l]) => `<a href="#/app/${b}" data-b="${b}" class="${b === bereich ? "aktiv" : ""}">${l}</a>`).join("")}
-      <a class="app-extern" href="${AGELAN_APP}" target="_blank" rel="noopener">In eigenem Fenster öffnen</a></div></div>
-    <iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}"></iframe></div>`;
+  main.innerHTML = `<div class="app-rahmen"><iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}"></iframe></div>`;
 }
 
 // ---------------------------------------------------------------------------
