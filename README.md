@@ -1,0 +1,50 @@
+# 🏰 agelan-backend – Website, Tickets, Sitzplan und Check-in für die AGE-LAN
+
+Nachfolger für age-lan.de bzw. das alte Dota-LAN-Admin-Panel. Später soll das unter **age-lan.de** laufen.
+
+| Teil | Was |
+|---|---|
+| **Website** | Start mit Countdown und Belegung, Die LAN, News, Tickets, Sitzplan (live), Gästeliste, FAQ, Texte (Anfahrt/AGB/Datenschutz/Impressum) |
+| **Konto** | Registrieren (Nick, Name, E-Mail, Geburtsdatum, Discord), Login, Daten ändern |
+| **Tickets** | Ticketsorten mit Kontingent, Zeitraum, Extras und Gutscheinen. Bezahlt wird per PayPal (Freunde), Überweisung oder bar; die Orga bestätigt die Zahlung |
+| **QR-Ticket** | Druckbares Ticket mit QR-Code (`AGELAN:<32 hex>`), Code in Vierergruppen wie beim alten Ticket |
+| **Sitzplan** | Gäste wählen selbst; Reservierungsgruppen mit Code, vorgemerkten Plätzen und Haltefrist |
+| **Sitzplan-Editor** | Plätze setzen, Tischblöcke einfügen, verschieben, umbenennen, sperren; Flächen, Texte und Wände zeichnen |
+| **Check-in** | QR-Code mit der Kamera scannen oder Gast suchen, Status prüfen (bezahlt? U18?), Bar-Zahlung kassieren, einchecken, **Netzwerk-Etikett mit Internet-Code (OTP)** drucken |
+| **Verwaltung** | Übersicht, Gäste & Zahlungen (Filter, CSV), Gruppen, Ticketsorten, Gutscheine, News, LANs, Einstellungen, Benutzer (Rollen, Passwort zurücksetzen, Ticket anlegen), Protokoll |
+
+Rollen: **Gast** · **Orga** (Check-in, Zahlungen bestätigen) · **Veranstalter** (alles).
+
+## Aufbau
+
+```
+index.html, css/, js/, img/   statische Website (GitHub Pages o. ä.)
+backend/worker.js             Cloudflare Worker + D1 – EIN Endpunkt POST /api {aktion, …}
+js/demo.js                    Demo-Modus: derselbe Worker läuft im Browser auf sql.js
+```
+
+## Demo / lokal testen
+
+`js/config.js` → `API_URL = ""` heißt **Demo-Modus**. Der echte Worker läuft dann im Browser, die Datenbank liegt im localStorage.
+Demo-Login: **Orga / demo1234** (Veranstalter). „Demo zurücksetzen“ im gelben Band stellt die Beispieldaten wieder her.
+
+Preview-Eintrag `agelan-backend` (Port 8792) in `Tools/.claude/launch.json`.
+
+## Live schalten (Cloudflare)
+
+1. **D1-Datenbank** anlegen, z. B. `agelan`. Das Schema legt der Worker beim ersten Aufruf selbst an.
+2. **Worker** anlegen und den Inhalt von `backend/worker.js` einfügen (ES-Modul).
+3. Beim Worker unter *Einstellungen → Bindungen*:
+   - D1-Bindung **`DB`** → die Datenbank
+   - Secret **`TOKEN_SECRET`** = langer Zufallswert
+   - Secret **`ADMIN_SETUP`** = Veranstalter-Passwort. Damit macht sich ein Konto unter „Konto → Veranstalter werden“ zum Veranstalter.
+   - Variable **`ORIGINS`** = `https://age-lan.de,https://www.age-lan.de` (plus ggf. die GitHub-Pages-Adresse)
+4. In `js/config.js` die Worker-Adresse eintragen.
+5. Konto anlegen → „Veranstalter werden“ → unter Einstellungen Zahlungsdaten, Texte (Impressum/Datenschutz/AGB) und Socials pflegen, Termin der LAN setzen.
+
+## Offen
+
+- **Internet-Freischaltung (OTP):** Wird beim Check-in erzeugt (5-stellig) und auf das Etikett gedruckt. Noch offen: welches System freischaltet (Captive Portal / UniFi-Vouchers / …) und ob es die Codes von uns abfragt oder wir Vouchers importieren.
+- **Konto in der AgeLan-App** (Essen/Turniere) mit diesem Konto verbinden.
+- Passwort-vergessen per E-Mail (aktuell: Orga setzt das Passwort zurück).
+- Übernahme der alten Konten/Gäste von age-lan.de.

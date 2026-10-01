@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AGE-LAN – Age of Empires 2 LAN</title>
+  <meta name="description" content="Die Age of Empires 2 LAN in Volkmarsen bei Kassel – Tickets, Sitzplan und alles rund um die LAN.">
+  <meta name="theme-color" content="#08090d">
+  <link rel="icon" href="img/wappen.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=1">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
+</head>
+<body>
+  <div id="baender"></div>
+  <header class="kopf">
+    <div class="wrap kopf-innen">
+      <a class="marke" href="#/"><img src="img/wappen.jpg" alt="" width="36" height="36"><span>AGE<b>-</b>LAN</span></a>
+      <nav class="nav" id="nav">
+        <a href="#/" data-route="">Start</a>
+        <a href="#/lan" data-route="lan">Die LAN</a>
+        <a href="#/tickets" data-route="tickets">Tickets</a>
+        <a href="#/sitzplan" data-route="sitzplan">Sitzplan</a>
+        <a href="#/gaeste" data-route="gaeste">Gäste</a>
+        <a href="#/faq" data-route="faq">FAQ</a>
+        <a href="#/checkin" data-route="checkin" class="nur-orga versteckt">Check-in</a>
+        <a href="#/admin" data-route="admin" class="nur-orga versteckt">Verwaltung</a>
+      </nav>
+      <div class="kopf-rechts" id="kopf-rechts"></div>
+      <button class="burger" id="burger" aria-label="Menü">☰</button>
+    </div>
+  </header>
+  <main id="app"><div class="lade">Lädt …</div></main>
+  <footer class="fuss">
+    <div class="wrap fuss-innen" id="fuss"></div>
+  </footer>
+  <div class="toasts" id="toasts"></div>
+  <div id="druck"></div>
+  <script type="module" src="js/app.js?v=1"></script>
+</body>
+</html>
