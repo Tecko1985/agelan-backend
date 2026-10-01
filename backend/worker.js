@@ -27,7 +27,7 @@ const ZAHLARTEN = { paypal: "PayPal (Freunde)", ueberweisung: "Überweisung", ba
 // ---------------------------------------------------------------------------
 // Schema – jede Anweisung einzeln (D1 exec verträgt keine mehrzeiligen).
 // ---------------------------------------------------------------------------
-export const SCHEMA = [
+const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nick TEXT NOT NULL, nick_key TEXT NOT NULL UNIQUE,

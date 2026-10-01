@@ -25,21 +25,24 @@ js/demo.js                    Demo-Modus: derselbe Worker läuft im Browser auf 
 
 ## Demo / lokal testen
 
-`js/config.js` → `API_URL = ""` heißt **Demo-Modus**. Der echte Worker läuft dann im Browser, die Datenbank liegt im localStorage.
+`?demo` in der Adresse (oder `API_URL = ""` in `js/config.js`) heißt **Demo-Modus**. Der echte Worker läuft dann im Browser, die Datenbank liegt im localStorage.
 Demo-Login: **Orga / demo1234** (Veranstalter). „Demo zurücksetzen“ im gelben Band stellt die Beispieldaten wieder her.
 
 Preview-Eintrag `agelan-backend` (Port 8792) in `Tools/.claude/launch.json`.
 
 ## Live schalten (Cloudflare)
 
-1. **D1-Datenbank** anlegen, z. B. `agelan`. Das Schema legt der Worker beim ersten Aufruf selbst an.
-2. **Worker** anlegen und den Inhalt von `backend/worker.js` einfügen (ES-Modul).
+Stand: D1-Datenbank **`agelan-backend`** (ID `0f5d0df7-f716-4635-bba5-f4919ed3195b`, Westeuropa) ist angelegt, Schema eingespielt.
+Website: https://tecko1985.github.io/agelan-backend/ (GitHub Pages, Branch main). Demo dort: `?demo` anhängen.
+
+1. **D1-Datenbank** – erledigt (siehe oben). Das Schema legt der Worker sonst beim ersten Aufruf selbst an.
+2. **Worker** `agelan-backend` anlegen und den Inhalt von `backend/worker.js` einfügen (ES-Modul) → Adresse `https://agelan-backend.michel-brunner.workers.dev`.
 3. Beim Worker unter *Einstellungen → Bindungen*:
    - D1-Bindung **`DB`** → die Datenbank
    - Secret **`TOKEN_SECRET`** = langer Zufallswert
    - Secret **`ADMIN_SETUP`** = Veranstalter-Passwort. Damit macht sich ein Konto unter „Konto → Veranstalter werden“ zum Veranstalter.
-   - Variable **`ORIGINS`** = `https://age-lan.de,https://www.age-lan.de` (plus ggf. die GitHub-Pages-Adresse)
-4. In `js/config.js` die Worker-Adresse eintragen.
+   - Variable **`ORIGINS`** = `https://tecko1985.github.io,https://age-lan.de,https://www.age-lan.de`
+4. `js/config.js` zeigt schon auf die Worker-Adresse. Lokal testen ohne Worker: `?demo` an die Adresse hängen.
 5. Konto anlegen → „Veranstalter werden“ → unter Einstellungen Zahlungsdaten, Texte (Impressum/Datenschutz/AGB) und Socials pflegen, Termin der LAN setzen.
 
 ## Offen

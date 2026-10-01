@@ -1,3 +1,3 @@
 // Adresse des Workers. Leer = Demo-Modus (alles läuft im Browser, Daten nur lokal).
-// Nach dem Deploy z. B.: "https://agelan-backend.<konto>.workers.dev"
-export const API_URL = "";
+// Mit ?demo in der Adresse läuft die Seite auch dann im Demo-Modus.
+export const API_URL = "https://agelan-backend.michel-brunner.workers.dev";
