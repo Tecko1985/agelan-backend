@@ -95,6 +95,13 @@ const SCHEMA = [
     user_id INTEGER, aktion TEXT NOT NULL, details TEXT NOT NULL DEFAULT '')`,
 ];
 
+// Spalten, die nach dem ersten Livegang dazukamen. ALTER TABLE scheitert, wenn
+// es die Spalte schon gibt – das ist hier der Normalfall und wird geschluckt.
+const MIGRATIONEN = [
+  "ALTER TABLE users ADD COLUMN discord_id TEXT NOT NULL DEFAULT ''",   // für die AgeLan-App (Discord-DMs)
+  "ALTER TABLE users ADD COLUMN streamer INTEGER NOT NULL DEFAULT 0",   // darf sich im Streamplan eintragen
+];
+
 // Einstellungen mit Standardwerten. Gespeichert wird nur, was abweicht.
 const STANDARD = {
   seite: {
@@ -207,6 +214,7 @@ let istBereit = false;
 async function bereitmachen(env) {
   if (istBereit) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
+  for (const m of MIGRATIONEN) { try { await env.DB.prepare(m).run(); } catch (e) { /* gibt es schon */ } }
   const lan = await eins(env, "SELECT id FROM lans LIMIT 1");
   if (!lan) await grundausstattung(env);
   istBereit = true;
@@ -414,6 +422,7 @@ function nutzerOeffentlich(u) {
   return {
     id: u.id, nick: u.nick, email: u.email, vorname: u.vorname, nachname: u.nachname,
     geburtsdatum: u.geburtsdatum, discord: u.discord, rolle: u.rolle, gesperrt: !!u.gesperrt, createdAt: u.created_at,
+    streamer: !!u.streamer,
   };
 }
 function typAus(t) {
@@ -1202,6 +1211,7 @@ const AKTIONEN = {
       if (u.id === ich.id && body.rolle !== "admin") throw new F(400, "Du kannst dir die Veranstalter-Rolle nicht selbst nehmen.");
       await los(env, "UPDATE users SET rolle = ? WHERE id = ?", body.rolle, u.id);
     }
+    if (body.streamer != null) await los(env, "UPDATE users SET streamer = ? WHERE id = ?", body.streamer ? 1 : 0, u.id);
     if (body.gesperrt != null) {
       if (u.id === ich.id) throw new F(400, "Du kannst dich nicht selbst sperren.");
       await los(env, "UPDATE users SET gesperrt = ?, token_ver = token_ver + 1 WHERE id = ?", body.gesperrt ? 1 : 0, u.id);

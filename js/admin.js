@@ -456,16 +456,20 @@ async function benutzer(box) {
   const { benutzer: bs } = await api("adminBenutzer");
   box.innerHTML = kopf(`Benutzer <span class="leise">(${bs.length})</span>`) + `
     <input data-q placeholder="Suchen …" style="max-width:320px;margin-bottom:14px">
-    <div class="tabelle-wrap"><table><thead><tr><th>Nick</th><th>Name</th><th>E-Mail</th><th>Geburtstag</th><th>Ticket</th><th>Rolle</th><th></th></tr></thead><tbody id="b-liste"></tbody></table></div>`;
+    <div class="tabelle-wrap"><table><thead><tr><th>Nick</th><th>Name</th><th>E-Mail</th><th>Geburtstag</th><th>Ticket</th><th>Rolle</th><th title="Darf sich in der AgeLan-App in den Streamplan eintragen">Streamer</th><th></th></tr></thead><tbody id="b-liste"></tbody></table></div>`;
   const zeichnen = () => {
     const q = $("[data-q]", box).value.trim().toLowerCase();
     $("#b-liste").innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
       <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
       <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["orga", "Orga"], ["admin", "Veranstalter"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td><input type="checkbox" data-streamer="${u.id}" ${u.streamer ? "checked" : ""}></td>
       <td style="white-space:nowrap"><button class="knopf klein" data-pw="${u.id}">Passwort neu</button> <button class="knopf klein geist" data-sperren="${u.id}">${u.gesperrt ? "Entsperren" : "Sperren"}</button></td></tr>`).join("");
     $$("[data-rolle]", box).forEach((s) => (s.onchange = async () => {
       try { await api("adminBenutzerAendern", { userId: Number(s.dataset.rolle), rolle: s.value }); bs.find((u) => u.id === Number(s.dataset.rolle)).rolle = s.value; toast("Rolle geändert.", "ok"); } catch (e) { fehler(e); zeichnen(); }
+    }));
+    $$("[data-streamer]", box).forEach((c) => (c.onchange = async () => {
+      try { await api("adminBenutzerAendern", { userId: Number(c.dataset.streamer), streamer: c.checked }); bs.find((u) => u.id === Number(c.dataset.streamer)).streamer = c.checked; toast("Gespeichert.", "ok"); } catch (e) { fehler(e); zeichnen(); }
     }));
     $$("[data-pw]", box).forEach((b) => (b.onclick = async () => {
       const u = bs.find((x) => x.id === Number(b.dataset.pw));

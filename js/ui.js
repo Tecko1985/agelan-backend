@@ -101,6 +101,8 @@ export async function mitSperre(knopf, fn) {
 
 // Der QR-Code auf dem Ticket ist ein Link auf die Ticket-Seite. Die Orga scannt ihn
 // im Check-in, der Gast mit der Handy-Kamera (→ Status, nach dem Check-in Internet-Zugang).
+export const AGELAN_APP = "https://tecko1985.github.io/agelan-klon/";
+
 export function ticketLink(code) {
   return location.origin + location.pathname + "#/t/" + code;
 }
@@ -111,7 +113,9 @@ export function zugangHtml(z) {
   return `<div class="karte glanz zugang"><span class="ueberzeile">Du bist eingecheckt</span><h2 style="margin:0 0 6px">🌐 Dein Internet-Zugang</h2>
     <p class="leise klein">${esc(z.hinweis)}</p>
     ${feld("WLAN", z.ssid, false)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
-    ${z.portal ? `<a class="knopf primaer" style="margin-top:12px" href="${esc(z.portal)}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}</div>`;
+    <div class="zeile" style="margin-top:12px">${z.portal ? `<a class="knopf primaer" href="${esc(z.portal)}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}
+      <a class="knopf" href="${esc(AGELAN_APP)}" target="_blank" rel="noopener">🍕 AgeLan-App öffnen (Essen, Turniere)</a></div>
+    <p class="klein leise" style="margin:8px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an.</p></div>`;
 }
 
 export function kopierenVerdrahten(root) {
