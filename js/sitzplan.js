@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=5";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=5";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=5";
-import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=5";
+import { api } from "./api.js?v=6";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=6";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=6";
+import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=6";
 
 export async function render(main, param) {
   await neuLaden();

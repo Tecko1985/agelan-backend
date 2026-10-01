@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js?v=5";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=5";
+import { api, token, tokenSetzen, istDemo } from "./api.js?v=6";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=6";
 
 export const zustand = { daten: null, ich: null };
 
@@ -38,7 +38,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=5")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=6")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -72,11 +72,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=5")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=5")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=5")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=5")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=5")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=6")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=6")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=6")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=6")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=6")).render(m, p),
 };
 
 let aufraeumen = null;
@@ -131,7 +131,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=5");
+    const konto = await import("./konto.js?v=6");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -372,7 +372,7 @@ function appUmschalten(bereich) {
     w.activateTab(bereich);
     if (typeof w.document !== "undefined") { const hub = w.document.getElementById("start-hub"); if (hub) hub.hidden = true; }
   } catch (e) { return false; }
-  $$(".app-leiste a[data-b]").forEach((a) => a.classList.toggle("aktiv", a.dataset.b === bereich));
+  $$(".app-kopf .app-kachel").forEach((a) => a.classList.toggle("aktiv", a.getAttribute("href") === "#/app/" + bereich));
   return true;
 }
 
@@ -392,7 +392,12 @@ async function seiteApp(main, bereich) {
     localStorage.setItem("agelan_konto", JSON.stringify(konto));
     localStorage.setItem("agelan_tab", bereich);
   } catch (e) { /* privater Modus: dann fragt die App selbst nach der Anmeldung */ }
-  main.innerHTML = `<div class="app-rahmen"><iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}"></iframe></div>`;
+  // Dieselben Kacheln wie in der LAN-Zentrale der Startseite – sie sind hier die
+  // Navigation; die Reiterleiste der App ist eingebettet ausgeblendet.
+  // &t= erzwingt die aktuelle Fassung der App (GitHub Pages cacht sonst 10 Min).
+  main.innerHTML = `<div class="app-rahmen">
+    <div class="app-kopf"><div class="wrap lz-kacheln">${APP_KACHELN.map(([b, titel, text]) => `<a class="app-kachel ${b === bereich ? "aktiv" : ""}" href="#/app/${b}"><b>${titel}</b><small>${text}</small></a>`).join("")}</div></div>
+    <iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}&t=${Date.now()}"></iframe></div>`;
 }
 
 // ---------------------------------------------------------------------------

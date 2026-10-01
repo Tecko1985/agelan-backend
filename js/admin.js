@@ -1,7 +1,7 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api } from "./api.js?v=5";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=5";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken } from "./ui.js?v=5";
+import { api } from "./api.js?v=6";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=6";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken } from "./ui.js?v=6";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -217,7 +217,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=5");
+    const { ticketHtml } = await import("./konto.js?v=6");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -267,7 +267,7 @@ async function gruppen(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  (await import("./planeditor.js?v=5")).editor($("#a-editor"), lanId);
+  (await import("./planeditor.js?v=6")).editor($("#a-editor"), lanId);
 }
 
 // ---------------------------------------------------------------------------

@@ -213,6 +213,15 @@ ul.haken li::before { content: "\2713"; position: absolute; left: 2px; color: va
 /* ---------- AgeLan-App eingebettet ---------- */
 .app-rahmen { display: flex; flex-direction: column; height: calc(100vh - 69px); }
 .app-rahmen iframe { min-height: 400px; }
+.app-kopf { background: #12161a; border-bottom: 1px solid #25262c; padding: 12px 0; }
+.app-kopf .app-kachel { padding: 10px 12px; }
+.app-kopf .app-kachel small { font-size: 0.8rem; }
+.app-kachel.aktiv { background: #2a2414; border-color: var(--gold); color: var(--text); }
+@media (max-width: 700px) {
+  .app-kopf .lz-kacheln { display: flex; overflow-x: auto; gap: 8px; }
+  .app-kopf .app-kachel { flex: 0 0 auto; }
+  .app-kopf .app-kachel small { display: none; }
+}
 .app-leiste { background: #101116; border-bottom: 1px solid #25262c; }
 .app-leiste .zeile { gap: 4px; min-height: 44px; }
 .app-leiste a { color: var(--leise); font-weight: 600; padding: 10px 12px; }
