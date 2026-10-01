@@ -73,6 +73,7 @@ const SEITEN = {
   seite: seiteText,
   sitzplan: async (m, p) => (await import("./sitzplan.js")).render(m, p),
   konto: async (m, p) => (await import("./konto.js")).render(m, p),
+  t: async (m, p) => (await import("./konto.js")).renderTicketSeite(m, p),
   checkin: async (m, p) => (await import("./checkin.js")).render(m, p),
   admin: async (m, p) => (await import("./admin.js")).render(m, p),
 };
@@ -212,7 +213,7 @@ async function seiteTickets(main) {
     <div class="raster raster-3" style="margin-top:36px">
       <div class="karte"><h3>💳 Bezahlen</h3><p class="leise">${esc(arten.join(", "))}. Nach dem Zahlungseingang bestätigt die Orga dein Ticket – dann ist dein Platz sicher.</p></div>
       <div class="karte"><h3>🪑 Platz wählen</h3><p class="leise">Mit Ticket suchst du dir deinen Platz im <a href="#/sitzplan">Sitzplan</a> aus. Mit Freunden? Gründet eine Reservierungsgruppe.</p></div>
-      <div class="karte"><h3>📱 Einlass</h3><p class="leise">Beim Check-in scannen wir den QR-Code deines Tickets. Du bekommst dein Netzwerk-Etikett mit dem Code fürs Internet.</p></div>
+      <div class="karte"><h3>📱 Einlass</h3><p class="leise">Beim Check-in scannen wir den QR-Code deines Tickets. Danach scannst du ihn selbst mit dem Handy und siehst deine Zugangsdaten fürs Internet.</p></div>
     </div></div>`;
   ticketKnoepfeVerdrahten(main);
 }

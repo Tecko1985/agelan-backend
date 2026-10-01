@@ -10,7 +10,7 @@ Nachfolger für age-lan.de bzw. das alte Dota-LAN-Admin-Panel. Später soll das 
 | **QR-Ticket** | Druckbares Ticket mit QR-Code (`AGELAN:<32 hex>`), Code in Vierergruppen wie beim alten Ticket |
 | **Sitzplan** | Gäste wählen selbst; Reservierungsgruppen mit Code, vorgemerkten Plätzen und Haltefrist |
 | **Sitzplan-Editor** | Plätze setzen, Tischblöcke einfügen, verschieben, umbenennen, sperren; Flächen, Texte und Wände zeichnen |
-| **Check-in** | QR-Code mit der Kamera scannen oder Gast suchen, Status prüfen (bezahlt? U18?), Bar-Zahlung kassieren, einchecken, **Netzwerk-Etikett mit Internet-Code (OTP)** drucken |
+| **Check-in** | QR-Code mit der Kamera scannen oder Gast suchen, Status prüfen (bezahlt? U18?), Bar-Zahlung kassieren, einchecken. Kein Drucker: Der Ticket-QR ist ein Link – der Gast scannt ihn nach dem Check-in mit dem Handy und sieht seine **Internet-Zugangsdaten (OTP)** |
 | **Verwaltung** | Übersicht, Gäste & Zahlungen (Filter, CSV), Gruppen, Ticketsorten, Gutscheine, News, LANs, Einstellungen, Benutzer (Rollen, Passwort zurücksetzen, Ticket anlegen), Protokoll |
 
 Rollen: **Gast** · **Orga** (Check-in, Zahlungen bestätigen) · **Veranstalter** (alles).
@@ -47,7 +47,7 @@ Website: https://tecko1985.github.io/agelan-backend/ (GitHub Pages, Branch main)
 
 ## Offen
 
-- **Internet-Freischaltung (OTP):** Wird beim Check-in erzeugt (5-stellig) und auf das Etikett gedruckt. Noch offen: welches System freischaltet (Captive Portal / UniFi-Vouchers / …) und ob es die Codes von uns abfragt oder wir Vouchers importieren.
+- **Internet-Freischaltung (OTP):** Wird beim Check-in erzeugt (6 Zeichen) und erscheint auf der Ticket-Seite (#/t/<code>) bzw. im Konto. WLAN/Portal unter Einstellungen → Internet-Zugang. Noch offen: welches System freischaltet (Captive Portal / UniFi-Vouchers / …) und ob es die Codes von uns abfragt oder wir Vouchers importieren.
 - **Konto in der AgeLan-App** (Essen/Turniere) mit diesem Konto verbinden.
 - Passwort-vergessen per E-Mail (aktuell: Orga setzt das Passwort zurück).
 - Übernahme der alten Konten/Gäste von age-lan.de.

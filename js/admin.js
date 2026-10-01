@@ -177,7 +177,6 @@ async function ticketDetails(t, fertig) {
       <div class="fehler-text"></div>
       <div class="zeile"><button class="knopf primaer">Speichern</button>
         <button type="button" class="knopf" data-ticket>🎟️ Ticket anzeigen</button>
-        ${t.checkinAt ? `<button type="button" class="knopf" data-etikett>🖨️ Etikett</button>` : ""}
         ${admin ? `<button type="button" class="knopf" data-otp>OTP neu</button>` : ""}
         ${admin && t.checkinAt ? `<button type="button" class="knopf" data-checkout>Check-in zurücknehmen</button>` : ""}
         ${admin && t.status !== "storniert" ? `<button type="button" class="knopf rot" data-storno>Stornieren</button>` : ""}</div>
@@ -222,7 +221,6 @@ async function ticketDetails(t, fertig) {
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>🖨️ Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
-  const et = $("[data-etikett]", m.el); if (et) et.onclick = async () => (await import("./checkin.js")).etikettDrucken(t);
   const otp = $("[data-otp]", m.el); if (otp) otp.onclick = aktion(() => api("adminTicketAendern", { ticketId: t.id, otpNeu: true }));
   const co = $("[data-checkout]", m.el); if (co) co.onclick = aktion(() => api("checkinZuruecknehmen", { ticketId: t.id }));
   const sto = $("[data-storno]", m.el);
@@ -407,6 +405,13 @@ async function einstellungen(box) {
       <div class="zwei"><label class="feld"><span>Bank</span><input name="bank" value="${esc(z.bank)}"></label><label class="feld"><span>Zahlungsfrist (Tage)</span><input name="fristTage" type="number" min="0" value="${z.fristTage}"></label></div>
       <label class="feld"><span>Hinweis für Gäste</span><textarea name="hinweis">${esc(z.hinweis)}</textarea></label>
       <button class="knopf primaer">Speichern</button></form>
+    <form class="karte formular" data-key="netz"><h3>🌐 Internet-Zugang</h3>
+      <p class="klein leise" style="margin:0">Steht nach dem Check-in auf dem Handy des Gastes. Das Passwort ist der Einmal-Code (OTP), der beim Check-in erzeugt wird.</p>
+      <div class="zwei"><label class="feld"><span>WLAN-Name (SSID)</span><input name="ssid" value="${esc(e.netz.ssid)}"></label><label class="feld"><span>WLAN-Passwort (leer = keins)</span><input name="wlanPasswort" value="${esc(e.netz.wlanPasswort)}"></label></div>
+      <div class="zwei"><label class="feld"><span>Portal-Adresse (optional)</span><input name="portal" value="${esc(e.netz.portal)}" placeholder="http://login.lan"></label>
+        <label class="feld"><span>Benutzername ist …</span><select name="benutzer"><option value="nick" ${e.netz.benutzer !== "code" ? "selected" : ""}>der Nickname</option><option value="code" ${e.netz.benutzer === "code" ? "selected" : ""}>die ersten 8 Zeichen des Ticket-Codes</option></select></label></div>
+      <label class="feld"><span>Hinweis für Gäste</span><input name="hinweis" value="${esc(e.netz.hinweis)}"></label>
+      <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="optionen"><h3>Optionen</h3>
       <label class="check"><input type="checkbox" name="gaesteOeffentlich" ${e.gaesteOeffentlich ? "checked" : ""}> Gästeliste und Namen im Sitzplan öffentlich</label>
       <label class="check"><input type="checkbox" name="sitzwahlOffen" ${e.sitzwahlOffen ? "checked" : ""}> Gäste dürfen ihren Platz selbst wählen</label>
@@ -429,6 +434,7 @@ async function einstellungen(box) {
   const sammeln = {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
     zahlung: (v) => [["zahlung", { arten: { paypal: v.a_paypal, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: v.paypal, paypalMe: v.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
+    netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis }]],
     optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen], ["gruppeHalteTage", Math.max(1, Number(v.gruppeHalteTage) || 21)], ["gruppeMaxSitze", Math.max(1, Number(v.gruppeMaxSitze) || 10)]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],
     faq: (v) => [["faq", v.t.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [f, ...a] = b.split("\n"); return { f: f.trim(), a: a.join("\n").trim() }; })]],

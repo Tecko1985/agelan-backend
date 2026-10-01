@@ -334,6 +334,12 @@ details.faq > div { padding: 0 18px 16px; color: var(--leise); white-space: pre-
   .lan-ticket .t-koerper { grid-template-columns: 1fr; }
 }
 
+.zugang { border-color: rgba(63, 191, 111, 0.6); box-shadow: 0 0 40px rgba(63, 191, 111, 0.1); }
+.zugang-feld { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--rand); }
+.zugang-feld span { color: var(--leise); font-size: 0.85rem; }
+.zugang-feld b { font-size: 1.25rem; color: var(--gold2); word-break: break-all; letter-spacing: 0.04em; }
+@media (max-width: 480px) { .zugang-feld { grid-template-columns: 1fr auto; } .zugang-feld span { grid-column: 1 / -1; } }
+
 /* ---------- Check-in ---------- */
 .scanner { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; aspect-ratio: 4 / 3; border: 1px solid var(--rand); }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -411,11 +417,3 @@ details.faq > div { padding: 0 18px 16px; color: var(--leise); white-space: pre-
   body.druckt::before { display: none; }
   .lan-ticket { box-shadow: none; border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-.beleg { width: 72mm; font: 12px/1.35 var(--sans); color: #000; padding: 2mm; }
-.beleg h1 { font: 700 20px var(--serif); margin: 0 0 1mm; color: #000; background: none; -webkit-text-fill-color: #000; text-align: center; }
-.beleg .mitte { text-align: center; }
-.beleg .gross { font: 800 30px/1.1 var(--sans); }
-.beleg .nick { font: 700 18px var(--sans); }
-.beleg hr { border-top: 1px dashed #000; margin: 3mm 0; }
-.beleg .otp { font: 800 26px ui-monospace, monospace; letter-spacing: 4px; border: 2px solid #000; padding: 2mm; text-align: center; margin: 2mm 0; }
-.beleg table td { padding: 1px 0; border: 0; font-size: 12px; }

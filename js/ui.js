@@ -99,6 +99,28 @@ export async function mitSperre(knopf, fn) {
   try { return await fn(); } catch (e) { fehler(e); } finally { knopf.disabled = false; knopf.innerHTML = alt; }
 }
 
+// Der QR-Code auf dem Ticket ist ein Link auf die Ticket-Seite. Die Orga scannt ihn
+// im Check-in, der Gast mit der Handy-Kamera (→ Status, nach dem Check-in Internet-Zugang).
+export function ticketLink(code) {
+  return location.origin + location.pathname + "#/t/" + code;
+}
+
+export function zugangHtml(z) {
+  const feld = (label, wert, mono = true) => wert ? `<div class="zugang-feld"><span>${esc(label)}</span><b class="${mono ? "mono" : ""}">${esc(wert)}</b>
+    <button class="knopf klein geist" data-kopieren="${esc(wert)}">Kopieren</button></div>` : "";
+  return `<div class="karte glanz zugang"><span class="ueberzeile">Du bist eingecheckt</span><h2 style="margin:0 0 6px">🌐 Dein Internet-Zugang</h2>
+    <p class="leise klein">${esc(z.hinweis)}</p>
+    ${feld("WLAN", z.ssid, false)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
+    ${z.portal ? `<a class="knopf primaer" style="margin-top:12px" href="${esc(z.portal)}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}</div>`;
+}
+
+export function kopierenVerdrahten(root) {
+  root.querySelectorAll("[data-kopieren]").forEach((b) => (b.onclick = () => {
+    navigator.clipboard?.writeText(b.dataset.kopieren);
+    toast("Kopiert.");
+  }));
+}
+
 export function qrSvg(text) {
   if (!window.qrcode) return "";
   const qr = window.qrcode(0, "H");

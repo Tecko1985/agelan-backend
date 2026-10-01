@@ -1,18 +1,11 @@
-// Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken,
-// Netzwerk-Etikett mit dem Internet-Code (OTP) drucken.
+// Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
+// Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
+// des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
 import { api } from "./api.js";
 import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre, drucken } from "./ui.js";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js";
 
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
-const FORMATE = {
-  "62mm": { name: "Etikett 62 mm (Brother QL)", seite: "62mm 100mm", breite: "58mm" },
-  "80mm": { name: "Bon 80 mm", seite: "80mm 120mm", breite: "72mm" },
-  a6: { name: "A6 Papier", seite: "A6", breite: "95mm" },
-};
-const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* egal */ } };
-
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);
@@ -20,25 +13,6 @@ function alterAm(geb, stichtag) {
   let a = sj - gj;
   if (sm < gm || (sm === gm && st < gt)) a--;
   return a;
-}
-
-export function etikettHtml(t, format) {
-  const f = FORMATE[format] || FORMATE["62mm"];
-  return `<div class="beleg" style="width:${f.breite}">
-    <div class="mitte"><h1>${esc(t.lan.name)}</h1><div>Willkommen!</div></div><hr>
-    <div class="mitte nick">${esc(t.nutzer.nick)}</div>
-    <div class="mitte">${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)}</div><hr>
-    <table style="width:100%"><tr><td>Platz</td><td style="text-align:right" class="gross">${esc(t.sitz || "–")}</td></tr>
-      ${t.gruppe ? `<tr><td>Gruppe</td><td style="text-align:right"><b>${esc(t.gruppe)}</b></td></tr>` : ""}
-      <tr><td>Ticket</td><td style="text-align:right">${esc(t.typ.name)}</td></tr></table>
-    <hr><div class="mitte"><b>Internet-Code</b></div>
-    <div class="otp">${esc(t.otp || "—")}</div>
-    <div class="mitte" style="font-size:10px">Check-in ${esc(zeit(t.checkinAt))}</div></div>`;
-}
-
-export function etikettDrucken(t) {
-  const format = lsGet("etikett-format", "62mm");
-  drucken(etikettHtml(t, format), (FORMATE[format] || FORMATE["62mm"]).seite);
 }
 
 let stream = null;
@@ -51,7 +25,7 @@ function skriptLaden(src) {
   return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
 }
 
-export async function render(main) {
+export async function render(main, param) {
   await neuLaden();
   if (!istOrga()) { main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">Der Check-in ist nur für die Orga. <a href="#/konto">Anmelden</a></div></div>`; return; }
   const lan = zustand.daten.lan;
@@ -59,8 +33,7 @@ export async function render(main) {
 
   main.innerHTML = `<div class="wrap">
     <div class="seitenkopf zeile zwischen" style="align-items:end"><div><span class="ueberzeile">${esc(lan.name)}</span><h1 style="margin:0">Check-in</h1></div>
-      <div class="zeile"><label class="klein leise">Etikett <select id="c-format" style="width:auto">${Object.entries(FORMATE).map(([k, f]) => `<option value="${k}">${f.name}</option>`).join("")}</select></label>
-      <label class="check klein"><input type="checkbox" id="c-auto"> Nach Check-in automatisch drucken</label></div></div>
+      <span class="leise klein">Nach dem Check-in sieht der Gast seine Internet-Zugangsdaten auf dem Handy.</span></div>
     <div class="raster raster-2" style="margin-top:18px;align-items:start">
       <div class="stapel">
         <div class="scanner" id="c-scanner"><video playsinline muted></video><div class="rahmen"></div><div class="hinweis" id="c-hinweis">Kamera starten, um QR-Codes zu scannen</div></div>
@@ -71,12 +44,6 @@ export async function render(main) {
       <div id="c-ergebnis"><div class="leer">Scanne ein Ticket oder suche nach einem Gast.</div></div>
     </div></div>`;
 
-  const format = $("#c-format");
-  format.value = lsGet("etikett-format", "62mm");
-  format.onchange = () => lsSet("etikett-format", format.value);
-  const auto = $("#c-auto");
-  auto.checked = lsGet("etikett-auto", "1") === "1";
-  auto.onchange = () => lsSet("etikett-auto", auto.checked ? "1" : "0");
 
   const ergebnis = $("#c-ergebnis");
 
@@ -86,7 +53,7 @@ export async function render(main) {
     if (t.status === "storniert") warnungen.push("Ticket ist STORNIERT.");
     if (t.lanId !== lan.id) warnungen.push("Ticket gehört zu einer anderen LAN (" + t.lan.name + ").");
     if (t.status === "offen") warnungen.push(`Noch nicht bezahlt – ${euro(t.preisCent)} (${t.zahlartText}).`);
-    if (t.checkinAt && hinweis !== "Eingecheckt") warnungen.push(`Bereits eingecheckt am ${zeit(t.checkinAt)} von ${t.checkinVon}.`);
+    if (t.checkinAt && !hinweis.startsWith("Eingecheckt")) warnungen.push(`Bereits eingecheckt am ${zeit(t.checkinAt)} von ${t.checkinVon}.`);
     if (alter != null && alter < 18) warnungen.push(`Unter 18 (${alter} J.) – Muttizettel und Aufsichtsperson prüfen!`);
     if (t.typ.mitSitz && !t.sitz) warnungen.push("Hat noch keinen Sitzplatz.");
     const art = t.status === "storniert" || t.lanId !== lan.id ? "fehler" : warnungen.length ? "warnung" : "ok";
@@ -100,7 +67,7 @@ export async function render(main) {
       <dl class="daten-liste">
         <dt>Status</dt><dd>${t.status === "bezahlt" ? `<span class="gruen">Bezahlt</span> (${esc(t.zahlartText)}${t.bezahltVon ? ", " + esc(t.bezahltVon) : ""})` : esc(t.status)}</dd>
         <dt>Gruppe</dt><dd>${esc(t.gruppe || "–")}</dd>
-        <dt>Internet-Code</dt><dd class="mono"><b>${esc(t.otp || "wird beim Check-in erzeugt")}</b></dd>
+        <dt>Internet</dt><dd>${t.otp ? `<span class="mono"><b>${esc(t.otp)}</b></span> <span class="klein leise">– steht beim Gast auf dem Handy</span>` : `<span class="leise">Zugang wird beim Check-in erzeugt</span>`}</dd>
         ${t.notiz ? `<dt>Hinweis Gast</dt><dd>${esc(t.notiz)}</dd>` : ""}
         <dt>Code</dt><dd class="mono klein">${esc(codeGruppen(t.code))}</dd></dl>
       <label class="feld" style="margin-top:14px"><span>Orga-Notiz</span><input id="c-notiz" value="${esc(t.orgaNotiz)}" placeholder="z. B. Muttizettel liegt vor"></label>
@@ -108,19 +75,16 @@ export async function render(main) {
         ${t.status === "storniert" || t.lanId !== lan.id ? "" : t.status === "offen"
           ? `<button class="knopf gruen gross" data-bar>💶 ${euro(t.preisCent)} bar kassiert + einchecken</button>`
           : t.checkinAt ? "" : `<button class="knopf gruen gross" data-checkin>✓ Einchecken</button>`}
-        ${t.checkinAt ? `<button class="knopf primaer" data-drucken>🖨️ Etikett drucken</button>` : ""}
       </div></div>`;
     const ausfuehren = (knopf, jetztBezahlt) => mitSperre(knopf, async () => {
       const r = await api("checkin", { ticketId: t.id, jetztBezahlt, zahlart: "bar", orgaNotiz: $("#c-notiz").value });
       toast(t.nutzer.nick + " ist eingecheckt ✓", "ok");
       zuletzt.unshift(r.ticket);
       zuletztZeichnen();
-      zeigen(r.ticket, "Eingecheckt");
-      if (auto.checked) etikettDrucken(r.ticket);
+      zeigen(r.ticket, "Eingecheckt – der Gast scannt jetzt seinen Ticket-QR mit dem Handy und sieht die Zugangsdaten");
     });
     const ck = $("[data-checkin]", ergebnis); if (ck) ck.onclick = () => ausfuehren(ck, false);
     const bar = $("[data-bar]", ergebnis); if (bar) bar.onclick = () => ausfuehren(bar, true);
-    const dr = $("[data-drucken]", ergebnis); if (dr) dr.onclick = () => etikettDrucken(t);
   };
 
   const zuletztZeichnen = () => {
@@ -185,4 +149,5 @@ export async function render(main) {
     schleife();
   };
   beimVerlassen(() => { laeuft = false; kameraStoppen(); });
+  if (param) { $("#c-suche").q.value = param; suchen(param); }
 }

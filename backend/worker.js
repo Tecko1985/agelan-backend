@@ -126,6 +126,8 @@ const STANDARD = {
     { f: "Gibt es Internet?", a: "Ja. Die Freischaltung bekommst du beim Check-in." },
   ],
   texte: { anfahrt: "", impressum: "", datenschutz: "", agb: "" },
+  // Internet-Zugang: steht nach dem Check-in auf dem Handy des Gastes (Ticket-QR bzw. Konto).
+  netz: { ssid: "", wlanPasswort: "", portal: "", benutzer: "nick", hinweis: "Verbinde dich mit dem Netz und melde dich im Portal mit diesen Daten an." },
   sponsoren: [],
   gaesteOeffentlich: true,
   sitzwahlOffen: true,
@@ -500,6 +502,23 @@ const AKTIONEN = {
     };
   },
 
+  // Ticket-Seite hinter dem QR-Code (#/t/<code>). Der 128-Bit-Code IST die
+  // Berechtigung – wer ihn hat, hat das Ticket in der Hand. Die Zugangsdaten
+  // gibt es erst nach dem Check-in.
+  async ticketSeite(c) {
+    const { env } = c;
+    const code = codeAus(String(c.body.code || ""));
+    const r = code ? await eins(env, "SELECT id FROM tickets WHERE code = ?", code) : null;
+    if (!r) throw new F(404, "Dieses Ticket gibt es nicht.");
+    const t = await ticketDetail(env, r.id);
+    const aus = {
+      nick: t.nutzer.nick, typ: t.typ.name, mitSitz: t.typ.mitSitz, status: t.status, sitz: t.sitz, gruppe: t.gruppe,
+      lan: t.lan, eingecheckt: !!t.checkinAt, checkinAt: t.checkinAt, zugang: null,
+    };
+    if (t.checkinAt && t.status !== "storniert") aus.zugang = await zugangsdaten(env, t);
+    return { ticket: aus };
+  },
+
   async news(c) {
     const x = await eins(c.env, "SELECT * FROM news WHERE id = ?", Number(c.body.id));
     if (!x) throw new F(404, "Diese Neuigkeit gibt es nicht.");
@@ -610,7 +629,7 @@ const AKTIONEN = {
     const gm = await eins(env, "SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ?", u.id, lan.id);
     return {
       nutzer: nutzerOeffentlich(u),
-      ticket: t ? await ticketDetail(env, t.id) : null,
+      ticket: t ? await mitZugang(env, await ticketDetail(env, t.id)) : null,
       gruppe: gm ? await gruppeDetail(env, gm.group_id, u.id) : null,
       alter: alterAm(u.geburtsdatum, lan.start || heute()),
     };
@@ -830,9 +849,9 @@ const AKTIONEN = {
     const lan = await lanAusBody(c);
     const roh = String(c.body.code || "");
     // QR enthält "AGELAN:<32 hex>", abgetippt wird "fccf / ac6e / …"
-    const treffer = roh.toLowerCase().trim().replace(/^agelan:/, "").replace(/[\s/\-]/g, "").match(/^[0-9a-f]{32}$/);
-    if (treffer) {
-      const t = await eins(env, "SELECT id, lan_id FROM tickets WHERE code = ?", treffer[0]);
+    const code = codeAus(roh);
+    if (code) {
+      const t = await eins(env, "SELECT id, lan_id FROM tickets WHERE code = ?", code);
       if (!t) throw new F(404, "Kein Ticket mit diesem Code gefunden.");
       const d = await ticketDetail(env, t.id);
       return { treffer: [d], andereLan: t.lan_id !== lan.id };
@@ -1211,7 +1230,29 @@ function lanAus(l) {
 }
 
 function otpErzeugen() {
-  return String(10000 + (new Uint32Array(zufallsBytes(4).buffer)[0] % 90000));
+  return zufallsCode(6);
+}
+
+// "AGELAN:<hex>", ".../#/t/<hex>", "fccf / ac6e / …" oder nackter Code -> 32 hex
+function codeAus(roh) {
+  const s = String(roh || "").toLowerCase().trim();
+  const m = s.match(/(?:\/t\/|agelan:)([0-9a-f]{32})(?![0-9a-f])/);
+  if (m) return m[1];
+  const kompakt = s.replace(/[\s/\-]/g, "");
+  return /^[0-9a-f]{32}$/.test(kompakt) ? kompakt : null;
+}
+
+async function mitZugang(env, t) {
+  if (t && t.checkinAt && t.status !== "storniert") t.zugang = await zugangsdaten(env, t);
+  return t;
+}
+
+async function zugangsdaten(env, t) {
+  const n = (await einstellungen(env)).netz;
+  return {
+    benutzer: n.benutzer === "code" ? t.code.slice(0, 8) : t.nutzer.nick,
+    passwort: t.otp, ssid: n.ssid, wlanPasswort: n.wlanPasswort, portal: n.portal, hinweis: n.hinweis,
+  };
 }
 
 async function preisBerechnen(c, lan) {

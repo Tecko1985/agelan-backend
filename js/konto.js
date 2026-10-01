@@ -1,6 +1,6 @@
 import { api, tokenSetzen } from "./api.js";
 import { zustand, neuLaden, abmelden, route } from "./app.js";
-import { esc, $, $$, euro, zeitraum, zeit, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken } from "./ui.js";
+import { esc, $, $$, euro, zeitraum, zeit, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten } from "./ui.js";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -134,8 +134,9 @@ export function ticketHtml(t) {
         <div style="margin-top:14px" class="t-typ">Beinhaltet</div>
         <ul>${t.typ.features.map((f) => `<li>${esc(f)}</li>`).join("")}${t.extras.map((x) => `<li>${esc(x.name)}</li>`).join("")}</ul>
       </div>
-      <div class="t-qr"><div class="qr">${qrSvg("AGELAN:" + t.code)}<img src="img/wappen.jpg" alt=""></div>
-        <div class="t-code">${esc(codeGruppen(t.code))}</div></div>
+      <div class="t-qr"><div class="qr">${qrSvg(ticketLink(t.code))}<img src="img/wappen.jpg" alt=""></div>
+        <div class="t-code">${esc(codeGruppen(t.code))}</div>
+        <div class="t-klein" style="margin-top:4px;max-width:210px">📱 Nach dem Check-in mit dem Handy scannen – dort stehen deine Internet-Zugangsdaten.</div></div>
     </div>
     <div class="t-fuss">
       <div><div class="t-klein">Ort</div><b>${esc(lan.ort)}</b><br>${esc(lan.adresse)}</div>
@@ -190,7 +191,7 @@ export async function render(main) {
     <div class="seitenkopf zeile zwischen" style="align-items:end"><div><span class="ueberzeile">Mein Konto</span><h1 style="margin:0">Hallo, ${esc(u.nick)}</h1></div>
       <button class="knopf geist" data-abmelden>Abmelden</button></div>
     <div class="konto-raster" style="margin-top:18px">
-      <div>${ticketTeil}</div>
+      <div class="stapel">${t && t.zugang ? zugangHtml(t.zugang) : ""}${ticketTeil}</div>
       <div class="stapel">
         ${gruppeHtml(g)}
         <div class="karte"><h3>Meine Daten</h3>
@@ -203,6 +204,7 @@ export async function render(main) {
     </div>${ticketUnten}</div>`;
 
   $("[data-abmelden]", main).onclick = abmelden;
+  kopierenVerdrahten(main);
   const druck = $("[data-drucken]", main);
   if (druck) druck.onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`, "A4");
   const storno = $("[data-storno]", main);
@@ -308,4 +310,33 @@ function gruppeVerdrahten(main, g) {
     if (!(await bestaetigen("Dieses Mitglied aus der Gruppe nehmen?", { ja: "Entfernen", gefahr: true }))) return;
     mitSperre(b, async () => { await api("gruppeEntfernen", { userId: Number(b.dataset.rauswerfen) }); render(main); });
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Ticket-Seite hinter dem QR-Code: #/t/<code>
+// ---------------------------------------------------------------------------
+export async function renderTicketSeite(main, code) {
+  await neuLaden();
+  const istOrga = zustand.ich && ["orga", "admin"].includes(zustand.ich.nutzer.rolle);
+  let t;
+  try { t = (await api("ticketSeite", { code })).ticket; } catch (e) {
+    main.innerHTML = `<div class="wrap" style="max-width:560px"><div class="leer" style="margin-top:40px">⚠️ ${esc(e.message)}</div></div>`;
+    return;
+  }
+  const ok = t.status === "bezahlt";
+  main.innerHTML = `<div class="wrap" style="max-width:620px"><div class="seitenkopf"><span class="ueberzeile">${esc(t.lan.name)} · ${esc(zeitraum(t.lan.start, t.lan.ende))}</span>
+      <h1 style="margin-bottom:6px">${esc(t.nick)}</h1><div class="zeile">
+      <span class="abzeichen ${t.status === "storniert" ? "rot" : ok ? "gruen" : "gold"}">${t.status === "storniert" ? "Storniert" : ok ? "✓ Gültiges Ticket" : "Zahlung offen"}</span>
+      ${t.eingecheckt ? `<span class="abzeichen gruen">✓ Eingecheckt</span>` : ""}</div></div>
+    ${istOrga ? `<div class="karte" style="margin-bottom:16px;border-color:var(--gold)"><b>Orga-Ansicht</b><p class="klein leise" style="margin:4px 0 10px">Du bist als Orga angemeldet.</p>
+      <a class="knopf primaer" href="#/checkin/${encodeURIComponent(code)}">Zum Check-in dieses Tickets</a></div>` : ""}
+    ${t.zugang ? zugangHtml(t.zugang) : `<div class="karte"><h3>${t.status === "storniert" ? "Dieses Ticket ist storniert." : "Noch nicht eingecheckt"}</h3>
+      <p class="leise">${t.status === "storniert" ? "" : "Zeig diesen QR-Code beim Einlass vor. Nach dem Check-in erscheinen hier deine Zugangsdaten fürs Internet – einfach den QR-Code auf deinem Ticket nochmal scannen oder diese Seite neu laden."}</p>
+      ${t.eingecheckt || t.status === "storniert" ? "" : `<button class="knopf" data-neu>↻ Neu laden</button>`}</div>`}
+    <div class="karte" style="margin-top:16px"><dl class="daten-liste"><dt>Ticket</dt><dd>${esc(t.typ)}</dd>
+      ${t.mitSitz ? `<dt>Platz</dt><dd><b class="gold">${esc(t.sitz || "noch keiner")}</b></dd>` : ""}${t.gruppe ? `<dt>Gruppe</dt><dd>${esc(t.gruppe)}</dd>` : ""}
+      <dt>Ort</dt><dd>${esc(t.lan.ort)}</dd></dl></div></div>`;
+  kopierenVerdrahten(main);
+  const neu = $("[data-neu]", main);
+  if (neu) neu.onclick = () => renderTicketSeite(main, code);
 }
