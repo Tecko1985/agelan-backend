@@ -23,6 +23,10 @@ backend/worker.js             Cloudflare Worker + D1 – EIN Endpunkt POST /api 
 js/demo.js                    Demo-Modus: derselbe Worker läuft im Browser auf sql.js
 ```
 
+## Nach jeder Änderung: Version hochzählen
+
+`python pflege/version.py` setzt in `index.html` und allen `js/*.js` dieselbe neue `?v=`-Nummer. Ohne das sehen Besucher bis zu 10 Minuten (GitHub-Pages-Cache) die alte Fassung. Alle Importe müssen dieselbe Nummer tragen, sonst lädt der Browser ein Modul doppelt (zwei getrennte Zustände).
+
 ## Demo / lokal testen
 
 `?demo` in der Adresse (oder `API_URL = ""` in `js/config.js`) heißt **Demo-Modus**. Der echte Worker läuft dann im Browser, die Datenbank liegt im localStorage.

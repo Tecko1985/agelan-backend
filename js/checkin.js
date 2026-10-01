@@ -1,9 +1,9 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js";
+import { api } from "./api.js?v=2";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=2";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=2";
 
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
 function alterAm(geb, stichtag) {

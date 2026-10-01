@@ -1,6 +1,6 @@
 // Demo-Modus: der ECHTE Worker (backend/worker.js) läuft im Browser, mit einer
 // SQLite-Datenbank aus sql.js statt D1. Die Datenbank liegt im localStorage.
-import worker from "../backend/worker.js";
+import worker from "../backend/worker.js?v=2";
 
 const SQL_CDN = "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/";
 const SPEICHER = "agelan-demo-db-v1";

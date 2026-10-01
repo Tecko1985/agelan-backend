@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js";
+import { api, token, tokenSetzen, istDemo } from "./api.js?v=2";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=2";
 
 export const zustand = { daten: null, ich: null };
 
@@ -38,7 +38,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=2")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -71,11 +71,11 @@ const SEITEN = {
   gaeste: seiteGaeste,
   tickets: seiteTickets,
   seite: seiteText,
-  sitzplan: async (m, p) => (await import("./sitzplan.js")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js")).render(m, p),
-  t: async (m, p) => (await import("./konto.js")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=2")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=2")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=2")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=2")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=2")).render(m, p),
 };
 
 let aufraeumen = null;
@@ -129,7 +129,7 @@ function ticketKarte(t, i) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js");
+    const konto = await import("./konto.js?v=2");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
