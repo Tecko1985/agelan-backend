@@ -1,5 +1,5 @@
 import { api, token, tokenSetzen, istDemo } from "./api.js";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast } from "./ui.js";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js";
 
 export const zustand = { daten: null, ich: null };
 
@@ -149,10 +149,39 @@ function countdownStarten(root, start) {
   beimVerlassen(() => clearInterval(iv));
 }
 
+// Eingecheckt? Dann gehört die LAN-Zentrale ganz nach oben: Platz, Internet,
+// und der direkte Weg in die AgeLan-App (Essen, Frühstück, Turniere, Stream).
+const APP_KACHELN = [
+  ["essen", "🍕", "Essen bestellen", "Speisekarte, Sonderwünsche, abholen"],
+  ["fruehstueck", "🥐", "Frühstück", "Für morgen früh vorbestellen"],
+  ["turnier", "🏆", "Turniere", "Eintragen, Spielplan, Ergebnisse"],
+  ["stream", "📺", "Stream", "Sendeplan und Showmatches"],
+  ["downloads", "💾", "Downloads", "Klickzähler und Map-Pack"],
+];
+function lanZentraleHtml(ich) {
+  const t = ich && ich.ticket;
+  if (!t || !t.checkinAt || t.status === "storniert") return "";
+  const z = t.zugang || {};
+  const feld = (label, wert) => wert ? `<div class="lz-feld"><span>${esc(label)}</span><b class="mono">${esc(wert)}</b><button class="knopf klein geist" data-kopieren="${esc(wert)}" title="Kopieren">⧉</button></div>` : "";
+  return `<section class="lan-zentrale"><div class="wrap">
+    <div class="lz-kopf">
+      <div><span class="ueberzeile">⚔️ Du bist eingecheckt</span><h2>Willkommen auf der ${esc(t.lan.name)}, ${esc(ich.nutzer.nick)}!</h2></div>
+      <div class="lz-sitz">${t.sitz ? `<span>Dein Platz</span><b>${esc(t.sitz)}</b>` : `<span>Ticket</span><b class="klein">${esc(t.typ.name)}</b>`}${t.gruppe ? `<em>👥 ${esc(t.gruppe)}</em>` : ""}</div>
+    </div>
+    <div class="lz-raster">
+      <div class="lz-kacheln">${APP_KACHELN.map(([b, ico, titel, text]) => `<a class="app-kachel" href="${AGELAN_APP}?bereich=${b}" target="_blank" rel="noopener">
+        <span class="ico">${ico}</span><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
+      <div class="lz-netz"><h3>🌐 Internet</h3>
+        ${feld("WLAN", z.ssid)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
+        ${z.portal ? `<a class="knopf klein primaer" href="${esc(z.portal)}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}
+        <p class="klein leise" style="margin:10px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an wie hier.</p></div>
+    </div></div></section>`;
+}
+
 async function seiteStart(main) {
   const d = await neuLaden();
   const { lan, zahlen: z, einstellungen: e } = d;
-  main.innerHTML = `
+  main.innerHTML = lanZentraleHtml(zustand.ich) + `
   <section class="hero"><div class="wrap hero-innen">
     <div>
       <span class="ueberzeile">${esc(e.seite.slogan)}</span>
@@ -196,6 +225,7 @@ async function seiteStart(main) {
     <div><h2 style="margin:0">Komm auf unseren Discord</h2><p class="leise" style="margin:6px 0 0">Mitspieler finden, Gruppen bilden, Turniere besprechen.</p></div>
     <a class="knopf primaer gross" href="${esc(e.seite.socials.discord)}" target="_blank" rel="noopener">Discord beitreten</a></div></div></section>` : ""}`;
   ticketKnoepfeVerdrahten(main);
+  kopierenVerdrahten(main);
   if (lan.start) countdownStarten(main, lan.start);
 }
 

@@ -114,7 +114,7 @@ export function zugangHtml(z) {
     <p class="leise klein">${esc(z.hinweis)}</p>
     ${feld("WLAN", z.ssid, false)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
     <div class="zeile" style="margin-top:12px">${z.portal ? `<a class="knopf primaer" href="${esc(z.portal)}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}
-      <a class="knopf" href="${esc(AGELAN_APP)}" target="_blank" rel="noopener">🍕 AgeLan-App öffnen (Essen, Turniere)</a></div>
+      <a class="knopf" href="${esc(AGELAN_APP)}?bereich=essen" target="_blank" rel="noopener">🍕 AgeLan-App öffnen (Essen, Turniere)</a></div>
     <p class="klein leise" style="margin:8px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an.</p></div>`;
 }
 
