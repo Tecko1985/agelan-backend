@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=2";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=2";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=2";
-import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=2";
+import { api } from "./api.js?v=3";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=3";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=3";
+import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=3";
 
 export async function render(main, param) {
   await neuLaden();
@@ -55,7 +55,7 @@ export async function render(main, param) {
     let meinTeil;
     if (!ich) meinTeil = `<div class="karte"><h3>Platz aussuchen</h3><p class="leise klein">Melde dich an und kaufe ein Ticket, dann kannst du hier deinen Platz wählen.</p><a class="knopf primaer" href="#/tickets">Zu den Tickets</a></div>`;
     else if (gruppenModus) {
-      meinTeil = `<div class="karte glanz"><h3>👥 ${esc(ich.gruppe.name)}</h3><p class="klein leise">${auswahl.size} von max. ${maxSitze} Plätzen gewählt.</p>
+      meinTeil = `<div class="karte glanz"><h3>${esc(ich.gruppe.name)}</h3><p class="klein leise">${auswahl.size} von max. ${maxSitze} Plätzen gewählt.</p>
         <div style="margin-bottom:12px">${[...auswahl].map((id) => { const s = daten.sitze.find((x) => x.id === id); return s ? `<span class="abzeichen blau">${esc(s.label)}</span> ` : ""; }).join("")}</div>
         <div class="zeile"><button class="knopf primaer" data-gruppe-speichern>Vormerkung speichern</button><a class="knopf geist" href="#/konto">Fertig</a></div></div>`;
     } else if (!t) meinTeil = `<div class="karte"><h3>Noch kein Ticket</h3><p class="leise klein">Ohne Ticket kannst du dir noch keinen Platz aussuchen.</p><a class="knopf primaer" href="#/tickets">Ticket kaufen</a></div>`;
@@ -97,7 +97,7 @@ export async function render(main, param) {
     if (!(await bestaetigen(t.sitz ? `Von ${t.sitz} auf Platz ${s.label} wechseln?` : `Platz ${s.label} nehmen?`, { ja: "Ja, Platz nehmen" }))) return;
     try {
       await api("sitzWaehlen", { sitzId: s.id });
-      toast("Platz " + s.label + " gehört dir! 🎉", "ok");
+      toast("Platz " + s.label + " gehört dir! ", "ok");
       await neuLaden();
       ich = zustand.ich;
       daten = await api("sitzplan");

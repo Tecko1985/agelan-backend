@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=2";
+import { esc } from "./ui.js?v=3";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
@@ -46,7 +46,7 @@ export function tooltipAnbinden(container, sitzVonId) {
     const s = sitzVonId(g.dataset.sitz);
     if (!s) return;
     tip.innerHTML = `<b>Platz ${esc(s.label)}</b><br><span class="leise">${esc(STATUS_TEXT[s.status] || "")}</span>
-      ${s.nick ? `<br>👤 ${esc(s.nick)}` : ""}${s.gruppe ? `<br>👥 ${esc(s.gruppe)}` : ""}${s.meins ? "<br>⭐ Dein Platz" : ""}`;
+      ${s.nick ? `<br>${esc(s.nick)}` : ""}${s.gruppe ? `<br>${esc(s.gruppe)}` : ""}${s.meins ? "<br>Dein Platz" : ""}`;
     tip.style.left = Math.min(e.clientX + 14, innerWidth - 250) + "px";
     tip.style.top = e.clientY + 14 + "px";
     tip.classList.remove("versteckt");

@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=2";
-import { zustand, neuLaden, abmelden, route } from "./app.js?v=2";
-import { esc, $, $$, euro, zeitraum, zeit, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten } from "./ui.js?v=2";
+import { api, tokenSetzen } from "./api.js?v=3";
+import { zustand, neuLaden, abmelden, route } from "./app.js?v=3";
+import { esc, $, $$, euro, zeitraum, zeit, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten } from "./ui.js?v=3";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -76,7 +76,7 @@ export async function kaufen(typId) {
   const typ = d.tickettypen.find((t) => t.id === typId);
   if (!typ) return;
   const za = d.einstellungen.zahlung;
-  const arten = [["paypal", "PayPal (Freunde & Familie)", "💙"], ["ueberweisung", "Überweisung", "🏦"], ["bar", "Bar bei der Orga / Abendkasse", "💶"]].filter(([k]) => za.arten[k]);
+  const arten = [["paypal", "PayPal (Freunde & Familie)", ""], ["ueberweisung", "Überweisung", ""], ["bar", "Bar bei der Orga / Abendkasse", ""]].filter(([k]) => za.arten[k]);
   const m = modal("Ticket bestellen", `<form class="formular">
     <div class="karte" style="padding:16px"><div class="zeile zwischen"><div><b>${esc(typ.name)}</b><div class="klein leise">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</div></div>
       <b class="gold">${euro(typ.preisCent)}</b></div></div>
@@ -107,7 +107,7 @@ export async function kaufen(typId) {
       try {
         await api("ticketKaufen", { ...daten(), zahlart: (form.querySelector("[name=zahlart]:checked") || {}).value, agb: form.agb.checked, notiz: form.notiz.value });
         m.schliessen();
-        toast("Ticket bestellt! 🎉", "ok");
+        toast("Ticket bestellt! ", "ok");
         location.hash = "#/konto";
         await neuLaden();
         route();
@@ -136,7 +136,7 @@ export function ticketHtml(t) {
       </div>
       <div class="t-qr"><div class="qr">${qrSvg(ticketLink(t.code))}<img src="img/wappen.jpg" alt=""></div>
         <div class="t-code">${esc(codeGruppen(t.code))}</div>
-        <div class="t-klein" style="margin-top:4px;max-width:210px">📱 Nach dem Check-in mit dem Handy scannen – dort stehen deine Internet-Zugangsdaten.</div></div>
+        <div class="t-klein" style="margin-top:4px;max-width:210px">Nach dem Check-in mit dem Handy scannen – dort stehen deine Internet-Zugangsdaten.</div></div>
     </div>
     <div class="t-fuss">
       <div><div class="t-klein">Ort</div><b>${esc(lan.ort)}</b><br>${esc(lan.adresse)}</div>
@@ -177,12 +177,12 @@ export async function render(main) {
           ${t.status === "bezahlt" ? `<span class="abzeichen gruen">✓ Bezahlt</span>` : `<span class="abzeichen gold">Zahlung offen</span>`}</div>
         <div class="status-schritte">${schritte.map(([l, f], i) => `<div class="${f ? "fertig" : i === jetzt ? "jetzt" : ""}">${f ? "✓ " : ""}${l}</div>`).join("")}</div>
         ${t.status === "offen" ? zahlInfo(t, za, kurz) : ""}
-        ${t.typ.mitSitz && !t.sitz ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>🪑 Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
+        ${t.typ.mitSitz && !t.sitz ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
         ${t.sitz ? `<p style="margin-top:14px">Dein Platz: <a class="abzeichen gold" href="#/sitzplan/${encodeURIComponent(t.sitz)}">${esc(t.sitz)}</a> ${t.checkinAt ? "" : `<a class="klein" href="#/sitzplan" style="margin-left:6px">ändern</a>`}</p>` : ""}
-        ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">⚠️ Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
+        ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
       </div>`;
     ticketUnten = `<div class="abschnitt-kopf" style="margin-top:36px"><div><span class="ueberzeile">Zum Vorzeigen beim Einlass</span><h2 style="margin:0">Dein Ticket</h2></div>
-        <div class="zeile"><button class="knopf primaer" data-drucken>🖨️ Drucken / als PDF</button>
+        <div class="zeile"><button class="knopf primaer" data-drucken>Drucken / als PDF</button>
         ${t.status === "offen" ? `<button class="knopf geist" data-storno>Bestellung stornieren</button>` : ""}</div></div>
       <div style="max-width:900px">${ticketHtml(t)}</div>`;
   }
@@ -243,7 +243,7 @@ function zahlInfo(t, za, kurz) {
   }
   const frist = za.fristTage ? new Date(t.createdAt + za.fristTage * 864e5).toLocaleDateString("de-DE") : "";
   return `<div class="karte" style="margin-top:12px;background:rgba(232,182,76,.06);border-color:var(--rand2)">
-    <div class="zeile zwischen" style="margin-bottom:10px"><b>💳 So bezahlst du</b>
+    <div class="zeile zwischen" style="margin-bottom:10px"><b>So bezahlst du</b>
       <select data-zahlart style="width:auto">${arten.map(([k, l]) => `<option value="${k}" ${k === t.zahlart ? "selected" : ""}>${l}</option>`).join("")}</select></div>
     ${wie}
     <p class="klein leise" style="margin:10px 0 0">${esc(za.hinweis)}${frist && t.zahlart !== "bar" ? " Bitte bezahle bis " + frist + "." : ""}</p></div>`;
@@ -273,7 +273,7 @@ function datenDialog(u, main) {
 // ---------------------------------------------------------------------------
 function gruppeHtml(g) {
   if (!g) {
-    return `<div class="karte"><h3>👥 Reservierungsgruppe</h3><p class="leise klein">Mit Freunden zusammen sitzen? Gründe eine Gruppe, merke einen Block Plätze vor und gib den Code weiter.</p>
+    return `<div class="karte"><h3>Reservierungsgruppe</h3><p class="leise klein">Mit Freunden zusammen sitzen? Gründe eine Gruppe, merke einen Block Plätze vor und gib den Code weiter.</p>
       <form class="zeile" data-gruppe-neu style="margin-bottom:10px"><input name="name" placeholder="Name der Gruppe" maxlength="30" style="flex:1;min-width:160px"><button class="knopf primaer">Gründen</button></form>
       <form class="zeile" data-gruppe-bei><input name="code" placeholder="Gruppen-Code" maxlength="10" style="flex:1;min-width:160px;text-transform:uppercase"><button class="knopf">Beitreten</button></form></div>`;
   }
@@ -284,9 +284,9 @@ function gruppeHtml(g) {
       <dt>Vorgemerkt</dt><dd>${g.sitze.length ? g.sitze.map((s) => `<span class="abzeichen ${s.besetzt ? "rot" : "blau"}">${esc(s.label)}</span>`).join(" ") : `<span class="leise">noch keine Plätze</span>`}</dd>
       <dt>Hält bis</dt><dd>${esc(zeit(g.ablauf))}</dd></dl>
     <div style="margin-top:12px"><div class="klein leise" style="margin-bottom:6px">Mitglieder</div>
-      ${g.mitglieder.map((m) => `<div class="zeile zwischen" style="padding:6px 0;border-bottom:1px dashed var(--rand)"><span>${esc(m.nick)} ${m.id === g.leitungId ? "👑" : ""}</span>
+      ${g.mitglieder.map((m) => `<div class="zeile zwischen" style="padding:6px 0;border-bottom:1px dashed var(--rand)"><span>${esc(m.nick)} ${m.id === g.leitungId ? "" : ""}</span>
         <span class="zeile">${m.sitz ? `<span class="abzeichen gold">${esc(m.sitz)}</span>` : ""}${m.ticket ? "" : `<span class="abzeichen">kein Ticket</span>`}
-        ${g.istLeitung && m.id !== g.leitungId ? `<button class="knopf klein geist" data-rauswerfen="${m.id}" title="Aus der Gruppe nehmen">✕</button>` : ""}</span></div>`).join("")}</div>
+        ${g.istLeitung && m.id !== g.leitungId ? `<button class="knopf klein geist" data-rauswerfen="${m.id}" title="Aus der Gruppe nehmen"></button>` : ""}</span></div>`).join("")}</div>
     <div class="zeile" style="margin-top:14px">
       ${g.istLeitung ? `<a class="knopf klein primaer" href="#/sitzplan/~gruppe">Plätze vormerken</a><button class="knopf klein" data-neuer-code>Neuer Code</button>` : ""}
       <button class="knopf klein geist" data-verlassen>Gruppe verlassen</button></div></div>`;
@@ -320,7 +320,7 @@ export async function renderTicketSeite(main, code) {
   const istOrga = zustand.ich && ["orga", "admin"].includes(zustand.ich.nutzer.rolle);
   let t;
   try { t = (await api("ticketSeite", { code })).ticket; } catch (e) {
-    main.innerHTML = `<div class="wrap" style="max-width:560px"><div class="leer" style="margin-top:40px">⚠️ ${esc(e.message)}</div></div>`;
+    main.innerHTML = `<div class="wrap" style="max-width:560px"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
     return;
   }
   const ok = t.status === "bezahlt";

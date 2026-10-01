@@ -1,21 +1,21 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api } from "./api.js?v=2";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=2";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken } from "./ui.js?v=2";
+import { api } from "./api.js?v=3";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=3";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken } from "./ui.js?v=3";
 
 const REITER = [
-  ["uebersicht", "📊 Übersicht", false],
-  ["gaeste", "🎟️ Gäste & Zahlungen", false],
-  ["gruppen", "👥 Reservierungsgruppen", false],
+  ["uebersicht", "Übersicht", false],
+  ["gaeste", "Gäste & Zahlungen", false],
+  ["gruppen", "Reservierungsgruppen", false],
   ["-", "Veranstalter"],
-  ["plan", "🪑 Sitzplan-Editor", true],
-  ["tickettypen", "🏷️ Ticketsorten", true],
-  ["gutscheine", "🎁 Gutscheine", true],
-  ["news", "📰 Neuigkeiten", true],
-  ["lans", "🏰 LANs", true],
-  ["einstellungen", "⚙️ Einstellungen", true],
-  ["benutzer", "👤 Benutzer", true],
-  ["protokoll", "📜 Protokoll", true],
+  ["plan", "Sitzplan-Editor", true],
+  ["tickettypen", "Ticketsorten", true],
+  ["gutscheine", "Gutscheine", true],
+  ["news", "Neuigkeiten", true],
+  ["lans", "LANs", true],
+  ["einstellungen", "Einstellungen", true],
+  ["benutzer", "Benutzer", true],
+  ["protokoll", "Protokoll", true],
 ];
 const ZAHLARTEN = { paypal: "PayPal", ueberweisung: "Überweisung", bar: "Bar" };
 let reiter = "uebersicht";
@@ -29,9 +29,9 @@ export async function render(main, param) {
   if (!lanId || !lans.some((l) => l.id === lanId)) lanId = (lans.find((l) => l.aktiv) || lans[0]).id;
   main.innerHTML = `<div class="wrap admin-layout">
     <nav class="admin-nav">
-      <div style="padding:0 6px 10px"><select id="a-lan" title="LAN">${lans.map((l) => `<option value="${l.id}" ${l.id === lanId ? "selected" : ""}>${esc(l.name)}${l.aktiv ? " ★" : ""}</option>`).join("")}</select></div>
+      <div style="padding:0 6px 10px"><select id="a-lan" title="LAN">${lans.map((l) => `<option value="${l.id}" ${l.id === lanId ? "selected" : ""}>${esc(l.name)}${l.aktiv ? " " : ""}</option>`).join("")}</select></div>
       ${REITER.filter(([, , nurAdmin]) => !nurAdmin || istAdmin()).map(([k, l]) => (k === "-" ? (istAdmin() ? `<div class="trenner">${l}</div>` : "") : `<button data-r="${k}" class="${k === reiter ? "aktiv" : ""}">${l}</button>`)).join("")}
-      <a class="knopf klein" style="margin:12px 6px 0" href="#/checkin">📷 Check-in öffnen</a>
+      <a class="knopf klein" style="margin:12px 6px 0" href="#/checkin">Check-in öffnen</a>
     </nav>
     <section id="a-inhalt"><div class="lade">Lädt …</div></section></div>`;
   $("#a-lan").onchange = (e) => { lanId = Number(e.target.value); zeigen(); };
@@ -50,7 +50,7 @@ async function zeigen() {
   box.innerHTML = `<div class="lade">Lädt …</div>`;
   try {
     await ({ uebersicht, gaeste, gruppen, plan, tickettypen, gutscheine, news, lans, einstellungen, benutzer, protokoll }[reiter] || uebersicht)(box);
-  } catch (e) { box.innerHTML = `<div class="leer">⚠️ ${esc(e.message)}</div>`; }
+  } catch (e) { box.innerHTML = `<div class="leer">${esc(e.message)}</div>`; }
 }
 
 const kopf = (titel, rechts = "") => `<div class="abschnitt-kopf"><h2>${titel}</h2><div class="zeile">${rechts}</div></div>`;
@@ -97,7 +97,7 @@ async function gaeste(box) {
   const d = await api("adminTickets", { lanId });
   const typen = [...new Set(d.tickets.map((t) => t.typ.name))];
   const gruppenNamen = [...new Set(d.tickets.map((t) => t.gruppe).filter(Boolean))].sort();
-  box.innerHTML = kopf(`Gäste <span class="leise">(${d.tickets.filter((t) => t.status !== "storniert").length})</span>`, `<button class="knopf klein" data-csv>⬇ CSV</button>`) + `
+  box.innerHTML = kopf(`Gäste <span class="leise">(${d.tickets.filter((t) => t.status !== "storniert").length})</span>`, `<button class="knopf klein" data-csv>CSV</button>`) + `
     <div class="filter">
       <input data-f="q" placeholder="Suche: Nick, Name, E-Mail, Platz">
       <select data-f="status"><option value="">Alle Status</option><option value="offen">Zahlung offen</option><option value="bezahlt">Bezahlt</option><option value="storniert">Storniert</option></select>
@@ -120,7 +120,7 @@ async function gaeste(box) {
   const zeichnen = () => {
     const l = liste();
     $("#a-liste").innerHTML = l.map((t) => `<tr>
-      <td><b>${esc(t.nutzer.nick)}</b><div class="klein leise">${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)}</div>${t.notiz ? `<div class="klein gold" title="${esc(t.notiz)}">💬 ${esc(t.notiz.slice(0, 40))}</div>` : ""}</td>
+      <td><b>${esc(t.nutzer.nick)}</b><div class="klein leise">${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)}</div>${t.notiz ? `<div class="klein gold" title="${esc(t.notiz)}">${esc(t.notiz.slice(0, 40))}</div>` : ""}</td>
       <td class="klein">${esc(t.typ.name)}</td><td>${statusAbzeichen(t)}${t.bezahltAt ? `<div class="klein leise">${esc(zeit(t.bezahltAt))}</div>` : ""}</td>
       <td class="klein">${esc(t.zahlartText)}</td><td class="zahl">${euro(t.preisCent)}</td><td class="klein">${esc(t.gruppe)}</td>
       <td>${t.sitz ? `<span class="abzeichen gold">${esc(t.sitz)}</span>` : t.typ.mitSitz ? `<span class="leise">–</span>` : `<span class="leise klein">Gast</span>`}</td>
@@ -176,7 +176,7 @@ async function ticketDetails(t, fertig) {
       <label class="feld"><span>Orga-Notiz</span><input name="orgaNotiz" value="${esc(t.orgaNotiz)}"></label>
       <div class="fehler-text"></div>
       <div class="zeile"><button class="knopf primaer">Speichern</button>
-        <button type="button" class="knopf" data-ticket>🎟️ Ticket anzeigen</button>
+        <button type="button" class="knopf" data-ticket>Ticket anzeigen</button>
         ${admin ? `<button type="button" class="knopf" data-otp>OTP neu</button>` : ""}
         ${admin && t.checkinAt ? `<button type="button" class="knopf" data-checkout>Check-in zurücknehmen</button>` : ""}
         ${admin && t.status !== "storniert" ? `<button type="button" class="knopf rot" data-storno>Stornieren</button>` : ""}</div>
@@ -217,8 +217,8 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=2");
-    const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>🖨️ Drucken</button></div>`, { breit: true });
+    const { ticketHtml } = await import("./konto.js?v=3");
+    const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
   const otp = $("[data-otp]", m.el); if (otp) otp.onclick = aktion(() => api("adminTicketAendern", { ticketId: t.id, otpNeu: true }));
@@ -237,7 +237,7 @@ async function gruppen(box) {
     <div class="karte"><div class="karte-kopf"><div><h3 style="margin:0">${esc(g.name)}</h3><div class="klein leise">Leitung: ${esc(g.leitung)} · Code <span class="mono gold">${esc(g.code)}</span></div></div>
       <span class="abzeichen ${g.aktiv ? "blau" : "rot"}">${g.aktiv ? "Plätze " + g.fuellung : "abgelaufen"}</span></div>
       <div class="klein" style="margin-bottom:8px">${g.sitze.map((s) => `<span class="abzeichen ${s.besetzt ? "rot" : "blau"}">${esc(s.label)}</span>`).join(" ") || `<span class="leise">keine Plätze vorgemerkt</span>`}</div>
-      <div class="klein leise" style="margin-bottom:10px">Mitglieder: ${g.mitglieder.map((m) => esc(m.nick) + (m.sitz ? " (" + esc(m.sitz) + ")" : "") + (m.ticket ? "" : " ⚠️")).join(", ")}</div>
+      <div class="klein leise" style="margin-bottom:10px">Mitglieder: ${g.mitglieder.map((m) => esc(m.nick) + (m.sitz ? " (" + esc(m.sitz) + ")" : "") + (m.ticket ? "" : " ")).join(", ")}</div>
       ${istAdmin() ? `<div class="zeile"><label class="klein leise">Hält bis <input type="date" data-ablauf="${g.id}" value="${new Date(g.ablauf).toISOString().slice(0, 10)}" style="width:auto;padding:5px"></label>
         <button class="knopf klein" data-sitze="${g.id}">Plätze ändern</button><button class="knopf klein rot" data-loeschen="${g.id}">Auflösen</button></div>` : ""}
     </div>`).join("")}</div>` : `<div class="leer">Noch keine Gruppen.</div>`);
@@ -267,7 +267,7 @@ async function gruppen(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  (await import("./planeditor.js?v=2")).editor($("#a-editor"), lanId);
+  (await import("./planeditor.js?v=3")).editor($("#a-editor"), lanId);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ async function tickettypen(box) {
     ${ts.map((t) => `<tr><td class="leise">${t.sort}</td><td><b>${esc(t.name)}</b>${t.extras.length ? `<div class="klein leise">+ ${t.extras.map((x) => esc(x.name)).join(", ")}</div>` : ""}</td><td class="zahl">${euro(t.preisCent)}</td>
       <td>${t.mitSitz ? "✓" : "–"}</td><td>${t.aktiv ? "✓" : "–"}</td><td>${t.kaufbar ? "✓" : "–"}</td><td class="zahl">${t.verkauft} / ${t.limit || "∞"}</td>
       <td class="klein">${t.von ? datum(t.von) : ""}${t.von || t.bis ? " – " : ""}${t.bis ? datum(t.bis) : ""}</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}">✕</button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}"></button>`}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="klein leise" style="margin-top:8px">„Aktiv“ = auf der Website sichtbar, „Kaufbar“ = kann bestellt werden. Nicht kaufbare Sorten (z. B. Orga/Free) vergibst du unter Benutzer → Ticket anlegen.</p>`;
   const bearbeiten = (t = { sort: ts.length + 1, name: "", beschreibung: "", features: [], preisCent: 0, extras: [], mitSitz: true, aktiv: true, kaufbar: true, limit: 0, von: "", bis: "" }) => {
@@ -325,7 +325,7 @@ async function gutscheine(box) {
       <button class="knopf primaer">Anlegen</button></form>
     <div class="tabelle-wrap"><table><thead><tr><th>Code</th><th>Wert</th><th>Bezeichnung</th><th class="zahl">Eingelöst</th><th>Von</th><th></th></tr></thead><tbody>
     ${gs.map((g) => `<tr><td class="mono gold">${esc(g.code)}</td><td>${g.typ === "prozent" ? g.wert + " %" : euro(g.wert)}</td><td>${esc(g.name)}</td><td class="zahl">${g.eingeloest} / ${g.max}</td><td class="klein">${esc(g.nutzer)}</td>
-      <td>${g.eingeloest ? "" : `<button class="knopf klein geist" data-loeschen="${g.id}">✕</button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leise">Noch keine Gutscheine.</td></tr>`}
+      <td>${g.eingeloest ? "" : `<button class="knopf klein geist" data-loeschen="${g.id}"></button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leise">Noch keine Gutscheine.</td></tr>`}
     </tbody></table></div>`;
   const f = $("[data-neu]", box);
   f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
@@ -341,7 +341,7 @@ async function news(box) {
   const d = await api("oeffentlich");
   box.innerHTML = kopf("Neuigkeiten", `<button class="knopf primaer klein" data-neu>+ Neue Meldung</button>`) +
     `<div class="stapel">${d.news.map((n) => `<div class="karte zeile zwischen"><div><div class="klein gold">${esc(datum(n.datum))}</div><b>${esc(n.titel)}</b><div class="klein leise">${esc(n.teaser)}</div></div>
-      <div class="zeile"><button class="knopf klein" data-bearbeiten="${n.id}">Bearbeiten</button><button class="knopf klein geist" data-loeschen="${n.id}">✕</button></div></div>`).join("") || `<div class="leer">Noch keine News.</div>`}</div>`;
+      <div class="zeile"><button class="knopf klein" data-bearbeiten="${n.id}">Bearbeiten</button><button class="knopf klein geist" data-loeschen="${n.id}"></button></div></div>`).join("") || `<div class="leer">Noch keine News.</div>`}</div>`;
   const bearbeiten = async (id) => {
     const n = id ? (await api("news", { id })).news : { titel: "", teaser: "", text: "", datum: new Date().toISOString().slice(0, 10) };
     const m = modal(id ? "Meldung bearbeiten" : "Neue Meldung", `<form class="formular">
@@ -405,7 +405,7 @@ async function einstellungen(box) {
       <div class="zwei"><label class="feld"><span>Bank</span><input name="bank" value="${esc(z.bank)}"></label><label class="feld"><span>Zahlungsfrist (Tage)</span><input name="fristTage" type="number" min="0" value="${z.fristTage}"></label></div>
       <label class="feld"><span>Hinweis für Gäste</span><textarea name="hinweis">${esc(z.hinweis)}</textarea></label>
       <button class="knopf primaer">Speichern</button></form>
-    <form class="karte formular" data-key="netz"><h3>🌐 Internet-Zugang</h3>
+    <form class="karte formular" data-key="netz"><h3>Internet-Zugang</h3>
       <p class="klein leise" style="margin:0">Steht nach dem Check-in auf dem Handy des Gastes. Das Passwort ist der Einmal-Code (OTP), der beim Check-in erzeugt wird.</p>
       <div class="zwei"><label class="feld"><span>WLAN-Name (SSID)</span><input name="ssid" value="${esc(e.netz.ssid)}"></label><label class="feld"><span>WLAN-Passwort (leer = keins)</span><input name="wlanPasswort" value="${esc(e.netz.wlanPasswort)}"></label></div>
       <div class="zwei"><label class="feld"><span>Portal-Adresse (optional)</span><input name="portal" value="${esc(e.netz.portal)}" placeholder="http://login.lan"></label>

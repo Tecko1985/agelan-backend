@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js?v=2";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=2";
+import { api, token, tokenSetzen, istDemo } from "./api.js?v=3";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=3";
 
 export const zustand = { daten: null, ich: null };
 
@@ -32,20 +32,20 @@ function rahmenZeichnen() {
   const s = d.einstellungen.seite;
   const baender = [];
   if (istDemo) {
-    baender.push(`<div class="demo-band">🧪 Demo-Modus – alle Daten liegen nur in diesem Browser. Demo-Login: <b>Orga</b> / <b>demo1234</b> (Veranstalter)
+    baender.push(`<div class="demo-band">Demo-Modus – alle Daten liegen nur in diesem Browser. Demo-Login: <b>Orga</b> / <b>demo1234</b> (Veranstalter)
       <button class="knopf klein geist" id="demo-reset">Demo zurücksetzen</button></div>`);
   }
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=2")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=3")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
   if (zustand.ich) {
     const t = zustand.ich.ticket;
-    rechts.innerHTML = `<a class="knopf klein ${t ? "" : "primaer"}" href="${t ? "#/konto" : "#/tickets"}">${t ? "🎟️ <span class='knopf-text'>Mein Ticket</span>" : "Ticket kaufen"}</a>
-      <a class="knopf klein geist" href="#/konto" title="Mein Konto">👤 <span class="knopf-text">${esc(zustand.ich.nutzer.nick)}</span></a>`;
+    rechts.innerHTML = `<a class="knopf klein ${t ? "" : "primaer"}" href="${t ? "#/konto" : "#/tickets"}">${t ? "<span class='knopf-text'>Mein Ticket</span>" : "Ticket kaufen"}</a>
+      <a class="knopf klein geist" href="#/konto" title="Mein Konto"><span class="knopf-text">${esc(zustand.ich.nutzer.nick)}</span></a>`;
   } else {
     rechts.innerHTML = `<a class="knopf klein geist" href="#/konto">Anmelden</a><a class="knopf klein primaer" href="#/tickets"><span>Ticket</span></a>`;
   }
@@ -54,7 +54,7 @@ function rahmenZeichnen() {
   const socials = [["discord", "DC"], ["twitch", "TW"], ["youtube", "YT"], ["instagram", "IG"], ["facebook", "FB"]]
     .filter(([k]) => so[k]).map(([k, kurz]) => `<a href="${esc(so[k])}" target="_blank" rel="noopener" title="${k}">${kurz}</a>`).join("");
   $("#fuss").innerHTML = `
-    <div><div class="marke" style="margin-bottom:8px"><img src="img/wappen.jpg" alt="" width="28" height="28"><span>AGE<b>-</b>LAN</span></div>
+    <div><img src="img/logo.webp" alt="AGE LAN" width="64" height="64" style="margin-bottom:8px">
       <div>${esc(s.slogan)}</div><div class="klein leiser" style="margin-top:6px">© ${new Date().getFullYear()} AGE-LAN · Private Veranstaltung</div></div>
     <div class="zeile" style="gap:18px"><a href="#/faq">FAQ</a><a href="#/seite/anfahrt">Anfahrt</a><a href="#/seite/agb">Teilnahmebedingungen</a><a href="#/seite/datenschutz">Datenschutz</a><a href="#/seite/impressum">Impressum</a></div>
     <div class="socials">${socials}</div>`;
@@ -71,11 +71,12 @@ const SEITEN = {
   gaeste: seiteGaeste,
   tickets: seiteTickets,
   seite: seiteText,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=2")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=2")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=2")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=2")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=2")).render(m, p),
+  app: seiteApp,
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=3")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=3")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=3")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=3")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=3")).render(m, p),
 };
 
 let aufraeumen = null;
@@ -84,6 +85,8 @@ export function beimVerlassen(fn) { aufraeumen = fn; }
 export async function route() {
   const [, name = "", param = ""] = (location.hash.replace(/^#/, "") || "/").split("/");
   const fn = SEITEN[name] || seiteStart;
+  // Bereichswechsel innerhalb der eingebetteten App: nicht neu laden, nur umschalten.
+  if (name === "app" && appUmschalten(param)) return;
   if (aufraeumen) { try { aufraeumen(); } catch (e) { /* egal */ } aufraeumen = null; }
   $$("#nav a").forEach((a) => a.classList.toggle("aktiv", a.dataset.route === name));
   $("#nav").classList.remove("offen");
@@ -92,7 +95,7 @@ export async function route() {
   try {
     await fn(main, decodeURIComponent(param));
   } catch (e) {
-    main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">⚠️ ${esc(e.message)}</div></div>`;
+    main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
   }
   if (!location.hash.includes("#/admin")) window.scrollTo(0, 0);
 }
@@ -102,34 +105,33 @@ export async function route() {
 // ---------------------------------------------------------------------------
 function belegungHtml(z) {
   const proz = z.sitzplaetze ? Math.round((z.sitzTickets / z.sitzplaetze) * 100) : 0;
-  return `<div class="belegung"><div class="zeile"><span><b class="gold">${z.sitzFrei}</b> von ${z.sitzplaetze} PC-Plätzen frei</span><span class="leise">${proz} % vergeben</span></div>
+  return `<div class="belegung"><div class="zeile zwischen"><span><b>${z.sitzFrei}</b> von ${z.sitzplaetze} PC-Plätzen frei</span><span class="leise">${z.gaeste} Gäste angemeldet</span></div>
     <div class="fortschritt"><i style="width:${proz}%"></i></div></div>`;
 }
 
-function newsKarte(n) {
-  const d = newsDatum(n.datum);
-  return `<a class="karte news-karte" href="#/news/${n.id}"><div class="news-datum"><span>${d.tag}. ${d.monat} ${d.jahr}</span></div>
-    <h3>${esc(n.titel)}</h3><p>${esc(n.teaser)}</p><span class="klein gold">Weiterlesen →</span></a>`;
+function datumKurz(iso) {
+  const [j, m, t] = String(iso).split("-");
+  return `${t}.${m}.${j}`;
 }
 
-function ticketKarte(t, i) {
-  const empf = i === 0 && t.verfuegbar;
-  return `<div class="karte ticket-karte ${empf ? "empfohlen" : ""}">
-    ${t.rest != null && t.rest > 0 && t.rest <= 20 ? `<div class="band">Nur noch ${t.rest}</div>` : ""}
-    <span class="ueberzeile">${t.mitSitz ? "Mit PC-Platz" : "Ohne PC-Platz"}</span>
-    <h3>${esc(t.name)}</h3>
-    <div class="leise klein">${esc(t.beschreibung)}</div>
-    <div class="preis">${euro(t.preisCent)}</div>
-    ${t.extras.length ? `<div class="klein leise">Extras: ${t.extras.map((x) => esc(x.name) + " (+" + euro(x.preisCent) + ")").join(", ")}</div>` : ""}
+function newsZeile(n) {
+  return `<a class="news-zeile" href="#/news/${n.id}"><time>${datumKurz(n.datum)}</time><div><b>${esc(n.titel)}</b>${n.teaser && n.teaser !== n.titel ? `<span>${esc(n.teaser)}</span>` : ""}</div></a>`;
+}
+
+function ticketKarte(t) {
+  return `<div class="karte ticket-karte">
+    <div class="zeile zwischen" style="align-items:baseline"><h3>${esc(t.name)}</h3><div class="preis">${euro(t.preisCent)}</div></div>
+    <div class="leise klein">${t.mitSitz ? "mit PC-Platz" : "ohne PC-Platz"}${t.beschreibung ? " – " + esc(t.beschreibung) : ""}</div>
     <ul>${t.features.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
-    ${t.bis ? `<div class="klein leise" style="margin-bottom:10px">Verfügbar bis ${datum(t.bis)}</div>` : ""}
+    ${t.extras.length ? `<div class="klein leise">Extras: ${t.extras.map((x) => esc(x.name) + " (+" + euro(x.preisCent) + ")").join(", ")}</div>` : ""}
+    <div class="klein leise ticket-hinweis">${[t.rest != null && t.rest > 0 ? "noch " + t.rest + " Stück" : "", t.bis ? "bis " + datum(t.bis) : ""].filter(Boolean).join(" · ")}</div>
     <button class="knopf ${t.verfuegbar ? "primaer" : ""} voll" data-kaufen="${t.id}" ${t.verfuegbar ? "" : "disabled"}>${t.verfuegbar ? "Ticket kaufen" : esc(t.grund)}</button>
   </div>`;
 }
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=2");
+    const konto = await import("./konto.js?v=3");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -140,90 +142,86 @@ function countdownStarten(root, start) {
   if (!box) return;
   const tick = () => {
     const rest = ziel - Date.now();
-    if (rest <= 0) { box.innerHTML = `<div style="min-width:auto;padding:12px 18px"><b>⚔️ Die LAN läuft!</b></div>`; return; }
-    const t = Math.floor(rest / 864e5), h = Math.floor(rest / 36e5) % 24, m = Math.floor(rest / 6e4) % 60, s = Math.floor(rest / 1e3) % 60;
-    box.innerHTML = [[t, "Tage"], [h, "Std"], [m, "Min"], [s, "Sek"]].map(([w, l]) => `<div><b>${String(w).padStart(2, "0")}</b><span>${l}</span></div>`).join("");
+    if (rest <= 0) { box.textContent = "Die LAN läuft."; return; }
+    const t = Math.floor(rest / 864e5), h = Math.floor(rest / 36e5) % 24, m = Math.floor(rest / 6e4) % 60;
+    box.innerHTML = `Noch <b>${t}</b> Tage, <b>${h}</b> Std. und <b>${m}</b> Min.`;
   };
   tick();
-  const iv = setInterval(tick, 1000);
+  const iv = setInterval(tick, 30000);
   beimVerlassen(() => clearInterval(iv));
 }
 
 // Eingecheckt? Dann gehört die LAN-Zentrale ganz nach oben: Platz, Internet,
 // und der direkte Weg in die AgeLan-App (Essen, Frühstück, Turniere, Stream).
 const APP_KACHELN = [
-  ["essen", "🍕", "Essen bestellen", "Speisekarte, Sonderwünsche, abholen"],
-  ["fruehstueck", "🥐", "Frühstück", "Für morgen früh vorbestellen"],
-  ["turnier", "🏆", "Turniere", "Eintragen, Spielplan, Ergebnisse"],
-  ["stream", "📺", "Stream", "Sendeplan und Showmatches"],
-  ["downloads", "💾", "Downloads", "Klickzähler und Map-Pack"],
+  ["essen", "Essen bestellen", "Speisekarte, Sonderwünsche, abholen"],
+  ["fruehstueck", "Frühstück", "Für morgen früh vorbestellen"],
+  ["turnier", "Turniere", "Eintragen, Spielplan, Ergebnisse"],
+  ["stream", "Stream", "Sendeplan und Showmatches"],
+  ["downloads", "Downloads", "Klickzähler und Map-Pack"],
 ];
 function lanZentraleHtml(ich) {
   const t = ich && ich.ticket;
   if (!t || !t.checkinAt || t.status === "storniert") return "";
   const z = t.zugang || {};
-  const feld = (label, wert) => wert ? `<div class="lz-feld"><span>${esc(label)}</span><b class="mono">${esc(wert)}</b><button class="knopf klein geist" data-kopieren="${esc(wert)}" title="Kopieren">⧉</button></div>` : "";
+  const feld = (label, wert) => wert ? `<div class="lz-feld"><span>${esc(label)}</span><b class="mono">${esc(wert)}</b><button class="knopf klein geist" data-kopieren="${esc(wert)}">Kopieren</button></div>` : "";
   return `<section class="lan-zentrale"><div class="wrap">
     <div class="lz-kopf">
-      <div><span class="ueberzeile">⚔️ Du bist eingecheckt</span><h2>Willkommen auf der ${esc(t.lan.name)}, ${esc(ich.nutzer.nick)}!</h2></div>
-      <div class="lz-sitz">${t.sitz ? `<span>Dein Platz</span><b>${esc(t.sitz)}</b>` : `<span>Ticket</span><b class="klein">${esc(t.typ.name)}</b>`}${t.gruppe ? `<em>👥 ${esc(t.gruppe)}</em>` : ""}</div>
+      <h2>Hallo ${esc(ich.nutzer.nick)}, du bist eingecheckt.</h2>
+      <div class="lz-sitz">${t.sitz ? `Platz <b>${esc(t.sitz)}</b>` : esc(t.typ.name)}${t.gruppe ? ` · ${esc(t.gruppe)}` : ""}</div>
     </div>
     <div class="lz-raster">
-      <div class="lz-kacheln">${APP_KACHELN.map(([b, ico, titel, text]) => `<a class="app-kachel" href="${AGELAN_APP}?bereich=${b}" target="_blank" rel="noopener">
-        <span class="ico">${ico}</span><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
-      <div class="lz-netz"><h3>🌐 Internet</h3>
+      <div class="lz-kacheln">${APP_KACHELN.map(([b, titel, text]) => `<a class="app-kachel" href="#/app/${b}"><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
+      <div class="lz-netz"><h3>Internet</h3>
         ${feld("WLAN", z.ssid)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
-        ${z.portal ? `<a class="knopf klein primaer" href="${esc(z.portal)}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}
-        <p class="klein leise" style="margin:10px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an wie hier.</p></div>
+        ${z.portal ? `<a class="knopf klein primaer" href="${esc(z.portal)}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}</div>
     </div></div></section>`;
+}
+
+function eckdatenListe(e) {
+  return `<ul class="haken">${e.highlights.map((h) => `<li><b>${esc(h.titel)}</b>${h.text ? ` – ${esc(h.text)}` : ""}</li>`).join("")}</ul>`;
 }
 
 async function seiteStart(main) {
   const d = await neuLaden();
   const { lan, zahlen: z, einstellungen: e } = d;
+  const ort = [lan.ort, lan.adresse].filter(Boolean).join(", ");
   main.innerHTML = lanZentraleHtml(zustand.ich) + `
-  <section class="hero"><div class="wrap hero-innen">
-    <div>
-      <span class="ueberzeile">${esc(e.seite.slogan)}</span>
-      <h1>${esc(lan.name)}</h1>
-      <div class="chips">
-        <span class="chip">📅 ${esc(zeitraum(lan.start, lan.ende))}</span>
-        ${lan.ort ? `<span class="chip">📍 ${esc(lan.ort)}</span>` : ""}
-        <span class="chip">🖥️ ${z.sitzplaetze} Plätze</span>
+  <div class="kopfbild"><img src="img/header.webp" alt="${esc(lan.name)} – Age of Empires 2 LAN"></div>
+  <section class="eckdaten"><div class="wrap">
+    <div class="eckdaten-innen">
+      <div>
+        <h1>${esc(lan.name)}</h1>
+        <p class="eck-zeile">${esc(zeitraum(lan.start, lan.ende))}${ort ? " · " + esc(ort) : ""}</p>
+        ${lan.start ? `<p class="countdown"></p>` : ""}
       </div>
-      ${lan.start ? `<div class="countdown"></div>` : ""}
-      <div class="zeile" style="margin-bottom:26px">
-        <a class="knopf primaer gross" href="#/tickets">Ticket sichern</a>
-        <a class="knopf gross" href="#/sitzplan">Sitzplan ansehen</a>
-      </div>
-      ${belegungHtml(z)}
+      <div class="zeile"><a class="knopf primaer gross" href="#/tickets">Tickets</a><a class="knopf gross" href="#/sitzplan">Sitzplan</a></div>
     </div>
-    <div class="hero-wappen"><div class="ring"></div><img src="img/wappen.jpg" alt="AGE-LAN Wappen"></div>
+    ${belegungHtml(z)}
+  </div></section>
+
+  <section class="abschnitt"><div class="wrap lan-kurz">
+    <figure><img src="img/halle.jpg" alt="Die Nordhessenhalle in Volkmarsen vor dem Aufbau" loading="lazy"><figcaption>Die Nordhessenhalle – noch leer. Ein paar Tage später stehen hier ${z.sitzplaetze} PCs.</figcaption></figure>
+    <div><h2>Die LAN</h2>${lan.beschreibung ? `<p class="news-text">${esc(lan.beschreibung)}</p>` : ""}${eckdatenListe(e)}
+      <p><a href="#/lan">Anfahrt, Hallenplan und alle Infos</a></p></div>
   </div></section>
 
   <section class="abschnitt"><div class="wrap">
-    <div class="abschnitt-kopf"><div><span class="ueberzeile">Was dich erwartet</span><h2>Vier Tage Age of Empires</h2></div></div>
-    <div class="raster raster-3">${e.highlights.map((h) => `<div class="karte highlight"><div class="ico">${esc(h.icon)}</div><div><h3>${esc(h.titel)}</h3><p>${esc(h.text)}</p></div></div>`).join("")}</div>
-  </div></section>
-
-  <section class="abschnitt"><div class="wrap">
-    <div class="abschnitt-kopf"><div><span class="ueberzeile">Tickets</span><h2>Sei dabei</h2></div><a href="#/tickets">Alle Infos zu Tickets →</a></div>
+    <div class="abschnitt-kopf"><h2>Tickets</h2><a href="#/tickets">Bezahlung und Ablauf</a></div>
     <div class="raster raster-3">${d.tickettypen.filter((t) => t.kaufbar).map(ticketKarte).join("") || `<div class="leer">Noch keine Tickets im Verkauf.</div>`}</div>
   </div></section>
 
-  ${d.news.length ? `<section class="abschnitt"><div class="wrap">
-    <div class="abschnitt-kopf"><div><span class="ueberzeile">Neuigkeiten</span><h2>Aus dem Lager</h2></div><a href="#/lan">Alle News →</a></div>
-    <div class="raster raster-3">${d.news.slice(0, 3).map(newsKarte).join("")}</div>
+  ${d.news.length ? `<section class="abschnitt"><div class="wrap schmal">
+    <div class="abschnitt-kopf"><h2>News</h2><a href="#/lan">Alle Meldungen</a></div>
+    <div class="news-liste">${d.news.slice(0, 5).map(newsZeile).join("")}</div>
   </div></section>` : ""}
 
   ${e.sponsoren.length ? `<section class="abschnitt"><div class="wrap">
-    <div class="abschnitt-kopf"><div><span class="ueberzeile">Danke an</span><h2>Unsere Sponsoren</h2></div></div>
+    <h2>Sponsoren</h2>
     <div class="sponsoren">${e.sponsoren.map((s) => `<a class="sponsor" ${s.url ? `href="${esc(s.url)}" target="_blank" rel="noopener"` : ""}>${s.logo ? `<img src="${esc(s.logo)}" alt="">` : ""}${esc(s.name)}</a>`).join("")}</div>
   </div></section>` : ""}
 
-  ${e.seite.socials && e.seite.socials.discord ? `<section class="abschnitt"><div class="wrap"><div class="karte glanz zeile zwischen" style="padding:28px">
-    <div><h2 style="margin:0">Komm auf unseren Discord</h2><p class="leise" style="margin:6px 0 0">Mitspieler finden, Gruppen bilden, Turniere besprechen.</p></div>
-    <a class="knopf primaer gross" href="${esc(e.seite.socials.discord)}" target="_blank" rel="noopener">Discord beitreten</a></div></div></section>` : ""}`;
+  ${e.seite.socials && e.seite.socials.discord ? `<section class="abschnitt"><div class="wrap"><p class="discord-zeile">Fragen, Mitfahrgelegenheit, Teams? Das läuft alles auf unserem <a href="${esc(e.seite.socials.discord)}" target="_blank" rel="noopener">Discord</a>.</p></div></section>` : ""}`;
   ticketKnoepfeVerdrahten(main);
   kopierenVerdrahten(main);
   if (lan.start) countdownStarten(main, lan.start);
@@ -233,18 +231,17 @@ async function seiteTickets(main) {
   const d = await neuLaden();
   const z = d.zahlen;
   const za = d.einstellungen.zahlung;
-  const arten = [za.arten.paypal && "PayPal (Freunde)", za.arten.ueberweisung && "Überweisung", za.arten.bar && "Bar"].filter(Boolean);
+  const arten = [za.arten.paypal && "PayPal (Freunde & Familie)", za.arten.ueberweisung && "Überweisung", za.arten.bar && "bar"].filter(Boolean);
   main.innerHTML = `<div class="wrap">
-    <div class="seitenkopf"><span class="ueberzeile">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</span><h1>Tickets</h1>
-      <p>Konto anlegen, Ticket wählen, bezahlen, Platz aussuchen – fertig. Dein Ticket mit QR-Code findest du danach in deinem Konto.</p>
-      ${belegungHtml(z)}</div>
+    <div class="seitenkopf"><h1>Tickets</h1><p class="leise">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</p>${belegungHtml(z)}</div>
     ${d.lan.verkaufOffen ? "" : `<div class="karte" style="margin:20px 0;border-color:var(--rot)">Der Ticketverkauf ist gerade geschlossen.</div>`}
-    <div class="raster raster-3" style="margin-top:26px">${d.tickettypen.map(ticketKarte).join("") || `<div class="leer">Noch keine Tickets im Verkauf.</div>`}</div>
-    <div class="raster raster-3" style="margin-top:36px">
-      <div class="karte"><h3>💳 Bezahlen</h3><p class="leise">${esc(arten.join(", "))}. Nach dem Zahlungseingang bestätigt die Orga dein Ticket – dann ist dein Platz sicher.</p></div>
-      <div class="karte"><h3>🪑 Platz wählen</h3><p class="leise">Mit Ticket suchst du dir deinen Platz im <a href="#/sitzplan">Sitzplan</a> aus. Mit Freunden? Gründet eine Reservierungsgruppe.</p></div>
-      <div class="karte"><h3>📱 Einlass</h3><p class="leise">Beim Check-in scannen wir den QR-Code deines Tickets. Danach scannst du ihn selbst mit dem Handy und siehst deine Zugangsdaten fürs Internet.</p></div>
-    </div></div>`;
+    <div class="raster raster-3" style="margin-top:22px">${d.tickettypen.map(ticketKarte).join("") || `<div class="leer">Noch keine Tickets im Verkauf.</div>`}</div>
+    <div class="karte ablauf" style="margin-top:28px"><h3>Ablauf</h3><ol>
+      <li>Konto anlegen und Ticket bestellen.</li>
+      <li>Bezahlen: ${esc(arten.join(", "))}. Sobald das Geld da ist, bestätigt die Orga dein Ticket – erst dann ist dein Platz sicher.</li>
+      <li>Platz im <a href="#/sitzplan">Sitzplan</a> aussuchen. Wer zusammen sitzen will, gründet eine Reservierungsgruppe.</li>
+      <li>Auf der LAN zeigst du den QR-Code deines Tickets beim Check-in vor. Danach stehen deine Internet-Daten im Konto.</li>
+    </ol></div></div>`;
   ticketKnoepfeVerdrahten(main);
 }
 
@@ -253,19 +250,20 @@ async function seiteLan(main) {
   const { lan, einstellungen: e } = d;
   const maps = lan.adresse ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(lan.ort + ", " + lan.adresse) : "";
   main.innerHTML = `<div class="wrap">
-    <div class="seitenkopf"><span class="ueberzeile">Die LAN</span><h1>${esc(lan.name)}</h1><p class="news-text">${esc(lan.beschreibung)}</p></div>
-    <div class="raster raster-2" style="margin-top:20px">
+    <div class="seitenkopf"><h1>${esc(lan.name)}</h1>${lan.beschreibung ? `<p class="news-text">${esc(lan.beschreibung)}</p>` : ""}</div>
+    <div class="raster raster-2" style="margin-top:18px">
       <div class="karte"><h3>Eckdaten</h3><dl class="daten-liste">
         <dt>Wann</dt><dd>${esc(zeitraum(lan.start, lan.ende))}</dd>
         <dt>Wo</dt><dd>${esc(lan.ort)}${lan.adresse ? "<br>" + esc(lan.adresse) : ""}</dd>
         <dt>Plätze</dt><dd>${d.zahlen.sitzplaetze} PC-Plätze</dd>
         <dt>Gäste</dt><dd>${d.zahlen.gaeste} angemeldet</dd></dl>
-        ${maps ? `<a class="knopf klein" style="margin-top:14px" href="${maps}" target="_blank" rel="noopener">📍 In Google Maps öffnen</a>` : ""}</div>
-      <div class="karte"><h3>Anfahrt</h3><p class="leise news-text">${esc(e.texte.anfahrt || "Infos zur Anfahrt folgen.")}</p></div>
+        ${eckdatenListe(e)}
+        ${maps ? `<a class="knopf klein" href="${maps}" target="_blank" rel="noopener">In Google Maps öffnen</a>` : ""}</div>
+      <div class="karte"><h3>Anfahrt</h3><p class="news-text">${esc(e.texte.anfahrt || "Infos zur Anfahrt folgen.")}</p></div>
     </div>
-    <div class="raster raster-3" style="margin-top:18px">${e.highlights.map((h) => `<div class="karte highlight"><div class="ico">${esc(h.icon)}</div><div><h3>${esc(h.titel)}</h3><p>${esc(h.text)}</p></div></div>`).join("")}</div>
-    <div class="abschnitt-kopf" style="margin-top:46px"><h2>Neuigkeiten</h2></div>
-    <div class="raster raster-3">${d.news.map(newsKarte).join("") || `<div class="leer">Noch keine News.</div>`}</div>
+    <div class="karte" style="margin-top:18px"><h3>Hallenplan</h3><img class="hallenplan" src="img/hallenplan.png" alt="Hallenplan der Nordhessenhalle mit Schlafsälen, Food-Point, Check-in und den Tischreihen A bis H" loading="lazy"></div>
+    <div class="abschnitt-kopf" style="margin-top:40px"><h2>News</h2></div>
+    <div class="news-liste schmal">${d.news.map(newsZeile).join("") || `<div class="leer">Noch keine News.</div>`}</div>
   </div>`;
 }
 
@@ -274,14 +272,14 @@ async function seiteNews(main, id) {
   const d = newsDatum(news.datum);
   main.innerHTML = `<div class="wrap" style="max-width:780px"><div class="seitenkopf">
     <a href="#/lan" class="klein">← Alle News</a>
-    <div class="news-datum" style="margin-top:16px">${d.tag}. ${d.monat} ${d.jahr}</div><h1>${esc(news.titel)}</h1>
+    <div class="leise" style="margin-top:16px">${d.tag}. ${d.monat} ${d.jahr}</div><h1>${esc(news.titel)}</h1>
     <p class="leise" style="font-size:1.1rem">${esc(news.teaser)}</p></div>
     <div class="karte news-text">${esc(news.text)}</div></div>`;
 }
 
 async function seiteFaq(main) {
   const d = zustand.daten || await neuLaden();
-  main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><span class="ueberzeile">Gut zu wissen</span><h1>FAQ</h1></div>
+  main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><h1>FAQ</h1></div>
     ${d.einstellungen.faq.map((f, i) => `<details class="faq" ${i === 0 ? "open" : ""}><summary>${esc(f.f)}</summary><div>${esc(f.a)}</div></details>`).join("")}</div>`;
 }
 
@@ -299,7 +297,7 @@ async function seiteGaeste(main) {
   if (!d.oeffentlich) { main.innerHTML = `<div class="wrap"><div class="seitenkopf"><h1>Gäste</h1></div><div class="leer">Die Gästeliste ist nicht öffentlich.</div></div>`; return; }
   const z = d.zahlen;
   main.innerHTML = `<div class="wrap">
-    <div class="seitenkopf"><span class="ueberzeile">Wer ist dabei?</span><h1>Gäste <span class="leise">(${d.gaeste.length})</span></h1>${belegungHtml(z)}</div>
+    <div class="seitenkopf"><h1>Gäste <span class="leise">(${d.gaeste.length})</span></h1>${belegungHtml(z)}</div>
     <div class="zeile" style="margin:18px 0"><input id="g-suche" placeholder="Suchen nach Nick, Gruppe oder Platz …" style="max-width:360px"></div>
     <div class="tabelle-wrap"><table><thead><tr><th>#</th><th>Nickname</th><th>Gruppe</th><th>Ticket</th><th>Platz</th></tr></thead><tbody id="g-liste"></tbody></table></div></div>`;
   const zeichnen = () => {
@@ -314,12 +312,58 @@ async function seiteGaeste(main) {
 }
 
 // ---------------------------------------------------------------------------
+// AgeLan-App eingebettet (#/app/<bereich>)
+// ---------------------------------------------------------------------------
+// Die App (agelan-klon) liegt unter derselben Herkunft (tecko1985.github.io).
+// Die Website holt beim Backend ein App-Token und legt es dort ab, wo die App
+// ihre Anmeldung sucht (localStorage "agelan_konto") – dann startet sie im
+// iframe ohne zweite Anmeldung.
+const BEREICHE = [["essen", "Essen"], ["fruehstueck", "Frühstück"], ["turnier", "Turniere"], ["stream", "Stream"], ["downloads", "Downloads"]];
+
+function appUmschalten(bereich) {
+  const rahmen = $("#app-frame");
+  const ziel = BEREICHE.find(([b]) => b === bereich);
+  if (!rahmen || !ziel) return false;
+  try {
+    const w = rahmen.contentWindow;
+    if (typeof w.activateTab !== "function") return false;
+    w.activateTab(bereich);
+    if (typeof w.document !== "undefined") { const hub = w.document.getElementById("start-hub"); if (hub) hub.hidden = true; }
+  } catch (e) { return false; }
+  $$(".app-leiste a[data-b]").forEach((a) => a.classList.toggle("aktiv", a.dataset.b === bereich));
+  return true;
+}
+
+async function seiteApp(main, bereich) {
+  if (!BEREICHE.some(([b]) => b === bereich)) bereich = "essen";
+  await neuLaden();
+  if (!zustand.ich) {
+    main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">Bitte zuerst <a href="#/konto">anmelden</a>.</div></div>`;
+    return;
+  }
+  let konto;
+  try { konto = (await api("appToken")).konto; } catch (e) {
+    main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
+    return;
+  }
+  try {
+    localStorage.setItem("agelan_konto", JSON.stringify(konto));
+    localStorage.setItem("agelan_tab", bereich);
+  } catch (e) { /* privater Modus: dann fragt die App selbst nach der Anmeldung */ }
+  main.innerHTML = `<div class="app-rahmen">
+    <div class="app-leiste"><div class="wrap zeile">
+      ${BEREICHE.map(([b, l]) => `<a href="#/app/${b}" data-b="${b}" class="${b === bereich ? "aktiv" : ""}">${l}</a>`).join("")}
+      <a class="app-extern" href="${AGELAN_APP}" target="_blank" rel="noopener">In eigenem Fenster öffnen</a></div></div>
+    <iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}"></iframe></div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 $("#burger").onclick = () => $("#nav").classList.toggle("offen");
 window.addEventListener("hashchange", route);
 neuLaden().then(route).catch((e) => {
-  $("#app").innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">⚠️ ${esc(e.message)}</div></div>`;
+  $("#app").innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
   fehler(e);
 });
 export { toast };

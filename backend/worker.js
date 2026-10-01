@@ -672,6 +672,31 @@ const AKTIONEN = {
     return { ok: true };
   },
 
+  // ---------- AgeLan-App (Klon) ----------
+  // Liefert ein Anmelde-Token für die AgeLan-App, damit sie ohne zweite
+  // Anmeldung in der Website laufen kann (gleiche Herkunft → gleicher
+  // localStorage). Format und Schlüssel sind die des Klon-Workers: Nutzlast
+  // {n,e,t,a,s,o} base64url + "." + HMAC-SHA256, Schlüssel in settings
+  // 'klon:tokenSecret' (legt der Klon-Worker sonst beim ersten Login selbst an).
+  async appToken(c) {
+    const { env } = c;
+    const u = brauchtLogin(c);
+    const lan = await aktiveLan(env);
+    const eingecheckt = await eins(env, "SELECT 1 AS x FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert' AND checkin_at IS NOT NULL", u.id, lan.id);
+    const admin = u.rolle === "admin", orga = admin || u.rolle === "orga", streamer = !!u.streamer;
+    if (!eingecheckt && !orga && !streamer) throw new F(403, "Die AgeLan-App wird beim Check-in freigeschaltet.");
+    await los(env, "INSERT OR IGNORE INTO settings (key, value) VALUES ('klon:tokenSecret', ?)", b64(zufallsBytes(32)));
+    const roh = (await eins(env, "SELECT value FROM settings WHERE key = 'klon:tokenSecret'")).value;
+    const key = await crypto.subtle.importKey("raw", unb64(roh), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const nutzlast = { n: u.nick, e: Date.now() + 120 * 864e5, t: Number(u.created_at) || 0 };
+    if (admin) nutzlast.a = 1;
+    if (streamer) nutzlast.s = 1;
+    if (orga) nutzlast.o = 1;
+    const teil = b64url(enc.encode(JSON.stringify(nutzlast)));
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(teil));
+    return { konto: { nickname: u.nick, token: teil + "." + b64url(sig), admin, streamer, orga, discordId: u.discord_id || "" } };
+  },
+
   // ---------- Tickets ----------
   async preisVorschau(c) {
     const lan = await aktiveLan(c.env);

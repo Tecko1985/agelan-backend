@@ -1,9 +1,9 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=2";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=2";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=2";
+import { api } from "./api.js?v=3";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=3";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=3";
 
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
 function alterAm(geb, stichtag) {
@@ -37,7 +37,7 @@ export async function render(main, param) {
     <div class="raster raster-2" style="margin-top:18px;align-items:start">
       <div class="stapel">
         <div class="scanner" id="c-scanner"><video playsinline muted></video><div class="rahmen"></div><div class="hinweis" id="c-hinweis">Kamera starten, um QR-Codes zu scannen</div></div>
-        <div class="zeile"><button class="knopf primaer" id="c-kamera">📷 Kamera starten</button>
+        <div class="zeile"><button class="knopf primaer" id="c-kamera">Kamera starten</button>
           <form id="c-suche" class="zeile" style="flex:1"><input name="q" placeholder="Code, Nick, Name oder Platz …" style="flex:1;min-width:160px" autocomplete="off"><button class="knopf">Suchen</button></form></div>
         <div class="karte"><h3>Zuletzt eingecheckt</h3><div id="c-zuletzt" class="leise klein">Noch niemand in dieser Sitzung.</div></div>
       </div>
@@ -62,7 +62,7 @@ export async function render(main, param) {
       <div class="karte-kopf"><div><div class="ueberzeile">${esc(t.typ.name)}</div><h2 style="margin:0">${esc(t.nutzer.nick)}</h2>
         <div class="leise">${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)}${alter != null ? " · " + alter + " J." : ""}</div></div>
         <div style="text-align:right"><div class="klein leise">Platz</div><div class="gross-sitz">${esc(t.sitz || "–")}</div></div></div>
-      ${warnungen.length ? `<div class="stapel" style="margin-bottom:14px">${warnungen.map((w) => `<div class="abzeichen ${art === "fehler" ? "rot" : "gold"}" style="white-space:normal;font-size:.85rem;padding:8px 12px">⚠️ ${esc(w)}</div>`).join("")}</div>`
+      ${warnungen.length ? `<div class="stapel" style="margin-bottom:14px">${warnungen.map((w) => `<div class="abzeichen ${art === "fehler" ? "rot" : "gold"}" style="white-space:normal;font-size:.85rem;padding:8px 12px">${esc(w)}</div>`).join("")}</div>`
         : `<div class="abzeichen gruen" style="font-size:.9rem;padding:8px 12px;margin-bottom:14px">✓ Alles in Ordnung</div>`}
       <dl class="daten-liste">
         <dt>Status</dt><dd>${t.status === "bezahlt" ? `<span class="gruen">Bezahlt</span> (${esc(t.zahlartText)}${t.bezahltVon ? ", " + esc(t.bezahltVon) : ""})` : esc(t.status)}</dd>
@@ -73,7 +73,7 @@ export async function render(main, param) {
       <label class="feld" style="margin-top:14px"><span>Orga-Notiz</span><input id="c-notiz" value="${esc(t.orgaNotiz)}" placeholder="z. B. Muttizettel liegt vor"></label>
       <div class="zeile" style="margin-top:16px">
         ${t.status === "storniert" || t.lanId !== lan.id ? "" : t.status === "offen"
-          ? `<button class="knopf gruen gross" data-bar>💶 ${euro(t.preisCent)} bar kassiert + einchecken</button>`
+          ? `<button class="knopf gruen gross" data-bar>${euro(t.preisCent)} bar kassiert + einchecken</button>`
           : t.checkinAt ? "" : `<button class="knopf gruen gross" data-checkin>✓ Einchecken</button>`}
       </div></div>`;
     const ausfuehren = (knopf, jetztBezahlt) => mitSperre(knopf, async () => {
@@ -108,7 +108,7 @@ export async function render(main, param) {
   // ---- Kamera ----
   let laeuft = false, letzter = "", letzterZeit = 0;
   $("#c-kamera").onclick = async () => {
-    if (laeuft) { laeuft = false; kameraStoppen(); $("#c-kamera").textContent = "📷 Kamera starten"; $("#c-hinweis").textContent = "Kamera gestoppt"; return; }
+    if (laeuft) { laeuft = false; kameraStoppen(); $("#c-kamera").textContent = "Kamera starten"; $("#c-hinweis").textContent = "Kamera gestoppt"; return; }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     } catch (e) { fehler(new Error("Kamera nicht verfügbar: " + e.message)); return; }
@@ -116,7 +116,7 @@ export async function render(main, param) {
     video.srcObject = stream;
     await video.play();
     laeuft = true;
-    $("#c-kamera").textContent = "⏹ Kamera stoppen";
+    $("#c-kamera").textContent = "Kamera stoppen";
     $("#c-hinweis").textContent = "QR-Code in den Rahmen halten";
     let detector = null;
     if ("BarcodeDetector" in window) { try { detector = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { detector = null; } }
