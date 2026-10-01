@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js?v=4";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=4";
+import { api, token, tokenSetzen, istDemo } from "./api.js?v=5";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=5";
 
 export const zustand = { daten: null, ich: null };
 
@@ -38,7 +38,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=4")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=5")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -72,11 +72,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=4")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=4")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=4")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=4")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=4")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=5")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=5")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=5")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=5")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=5")).render(m, p),
 };
 
 let aufraeumen = null;
@@ -131,7 +131,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=4");
+    const konto = await import("./konto.js?v=5");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -284,12 +284,54 @@ async function seiteFaq(main) {
 }
 
 const TEXTSEITEN = { anfahrt: "Anfahrt", impressum: "Impressum", datenschutz: "Datenschutz", agb: "Teilnahmebedingungen" };
+// Rechtstexte & Co. werden als schlichter Text gepflegt (Verwaltung → Einstellungen).
+// Hier wird daraus lesbares HTML: kurze Zeilen ohne Schlusspunkt am Blockanfang
+// werden Überschriften, Zeilen mit "1." / "-" werden Listen, "Stand: …" klein.
+function textAlsHtml(text, seitenTitel) {
+  const verlinken = (s) => esc(s)
+    .replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g, '<a href="mailto:$1">$1</a>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const istUeberschrift = (z) => z.length <= 80 && !/[.,;]$/.test(z) && !/^(Stand|Telefon|E-Mail)\b/.test(z);
+  const bloecke = String(text || "").replace(/\r/g, "").split(/\n\s*\n/).map((b) => b.split("\n").map((z) => z.trim()).filter(Boolean)).filter((b) => b.length);
+  let html = "";
+  bloecke.forEach((zeilen, i) => {
+    // Erste Zeile, die nur den Seitentitel wiederholt, weglassen.
+    if (i === 0 && seitenTitel && zeilen[0].toLowerCase().startsWith(seitenTitel.toLowerCase().slice(0, 12))) zeilen = zeilen.slice(1);
+    if (!zeilen.length) return;
+    if (zeilen.length === 1 && istUeberschrift(zeilen[0]) && !/^\d+\.\s/.test(zeilen[0]) && zeilen[0].split(" ").length <= 4) {
+      html += `<h2>${esc(zeilen[0])}</h2>`;
+      return;
+    }
+    if (zeilen.length > 1 && istUeberschrift(zeilen[0])) {
+      html += `<h3>${esc(zeilen[0])}</h3>`;
+      zeilen = zeilen.slice(1);
+    }
+    const nummeriert = zeilen.every((z) => /^\d+\.\s/.test(z));
+    const punkte = zeilen.every((z) => /^[-–•]\s/.test(z));
+    if (zeilen.length > 1 && (nummeriert || punkte)) {
+      const tag = nummeriert ? "ol" : "ul";
+      html += `<${tag}>${zeilen.map((z) => `<li>${verlinken(z.replace(/^(\d+\.|[-–•])\s+/, ""))}</li>`).join("")}</${tag}>`;
+      return;
+    }
+    // Kurze Zeilen (Anschrift, Kontakt) bleiben ein Absatz mit Umbrüchen.
+    if (zeilen.length > 1 && zeilen.every((z) => z.length < 70)) {
+      html += `<p>${zeilen.map(verlinken).join("<br>")}</p>`;
+      return;
+    }
+    zeilen.forEach((z) => {
+      if (/^Stand:/.test(z)) html += `<p class="stand">${esc(z)}</p>`;
+      else html += `<p>${verlinken(z)}</p>`;
+    });
+  });
+  return html;
+}
+
 async function seiteText(main, welche) {
   const d = zustand.daten || await neuLaden();
   const titel = TEXTSEITEN[welche] || "Seite";
   const inhalt = d.einstellungen.texte[welche] || "";
-  main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><h1>${esc(titel)}</h1></div>
-    <div class="karte news-text">${esc(inhalt || "Dieser Text wird noch ergänzt.")}</div></div>`;
+  main.innerHTML = `<div class="wrap rechtstext-wrap"><div class="seitenkopf"><h1>${esc(titel)}</h1></div>
+    <article class="rechtstext">${inhalt ? textAlsHtml(inhalt, titel) : "<p>Dieser Text wird noch ergänzt.</p>"}</article></div>`;
 }
 
 async function seiteGaeste(main) {
