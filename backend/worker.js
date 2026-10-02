@@ -12,6 +12,9 @@
 //                            Veranstalter macht (Konto → „Veranstalter werden“).
 //   ORIGINS       (Var)    = erlaubte Browser-Herkünfte, kommagetrennt,
 //                            z. B. "https://age-lan.de,https://tecko1985.github.io"
+//   Wallet (optional, alles als Secret): APPLE_PASS_TYPE_ID, APPLE_TEAM_ID,
+//                            APPLE_PASS_CERT, APPLE_PASS_KEY, APPLE_WWDR_CERT bzw.
+//                            GOOGLE_WALLET_ISSUER_ID, GOOGLE_WALLET_KEY. Siehe pflege/wallet.md.
 //   PORTAL_SECRET (Secret) = gemeinsames Geheimnis mit dem Anmeldeportal der
 //                            Halle (portal.lan). Ohne Secret ist die Aktion
 //                            portalAnmeldung gesperrt. Siehe pflege/portal-anbindung.md.
@@ -162,6 +165,8 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     if (/\/check_otp\/?$/.test(url.pathname)) return checkOtp(request, env, cors);
+    const wallet = url.pathname.match(/\/wallet\/(apple|google)\/([0-9a-fA-F]{32})\/?$/);
+    if (wallet) return walletAnfrage(request, env, wallet[1], wallet[2].toLowerCase());
     if (!/\/api\/?$/.test(url.pathname)) return json({ error: "Nicht gefunden" }, 404, cors);
     if (request.method !== "POST") return json({ error: "Nur POST" }, 405, cors);
 
@@ -526,7 +531,7 @@ const AKTIONEN = {
     const einst = {};
     for (const k of OEFFENTLICHE_EINSTELLUNGEN) einst[k] = e[k];
     return {
-      lan: lanAus(lan), zahlen: z, einstellungen: einst, news,
+      lan: lanAus(lan), zahlen: z, einstellungen: einst, news, wallet: { apple: appleBereit(env), google: googleBereit(env) },
       tickettypen: typen.map((t) => {
         const x = typAus(t);
         const n = (verkauft.find((v) => v.type_id === t.id) || {}).n || 0;
@@ -1581,4 +1586,244 @@ async function gruppeDetail(env, gid, fuerUser, alsOrga) {
     sitze: sitze.map((s) => ({ id: s.id, label: s.label, besetzt: !!s.t_user })),
     fuellung: sitze.length ? besetzt + "/" + sitze.length : "0/0",
   };
+}
+
+// ===========================================================================
+// Wallet: Ticket als Apple-Wallet-Pass (.pkpass) bzw. Google-Wallet-Link.
+//   GET /wallet/apple/<ticket-code>   → .pkpass (signiert)
+//   GET /wallet/google/<ticket-code>  → Weiterleitung zu „In Google Wallet speichern“
+// Der Ticket-Code (32 hex) ist wie beim Ticket-QR der Schlüssel – dieselben
+// Links können später in die Bestätigungs-E-Mail. Einrichtung: pflege/wallet.md
+// ===========================================================================
+const SEITE_STANDARD = "https://tecko1985.github.io/agelan-backend/";
+const seiteUrl = (env) => String(env.SITE_URL || SEITE_STANDARD).replace(/\/?$/, "/");
+const appleBereit = (env) => !!(env.APPLE_PASS_TYPE_ID && env.APPLE_TEAM_ID && env.APPLE_PASS_CERT && env.APPLE_PASS_KEY && env.APPLE_WWDR_CERT);
+const googleBereit = (env) => !!(env.GOOGLE_WALLET_ISSUER_ID && env.GOOGLE_WALLET_KEY);
+
+async function walletAnfrage(request, env, art, roh) {
+  const fehlerSeite = (status, text) => new Response(
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AGE-LAN</title><body style="font-family:sans-serif;background:#08090d;color:#ece9e1;padding:24px"><p>${text}</p><p><a style="color:#e8b64c" href="${seiteUrl(env)}">Zur AGE-LAN-Website</a></p>`,
+    { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  if (request.method !== "GET") return fehlerSeite(405, "Nur GET.");
+  try {
+    if (art === "apple" && !appleBereit(env)) return fehlerSeite(503, "Apple Wallet ist noch nicht eingerichtet.");
+    if (art === "google" && !googleBereit(env)) return fehlerSeite(503, "Google Wallet ist noch nicht eingerichtet.");
+    await bereitmachen(env);
+    const code = codeAus(roh);
+    const r = code ? await eins(env, "SELECT id FROM tickets WHERE code = ?", code) : null;
+    if (!r) return fehlerSeite(404, "Dieses Ticket gibt es nicht.");
+    const t = await ticketDetail(env, r.id);
+    if (t.status === "storniert") return fehlerSeite(410, "Dieses Ticket ist storniert.");
+    if (art === "apple") {
+      const datei = await applePass(env, t);
+      return new Response(datei, { headers: {
+        "Content-Type": "application/vnd.apple.pkpass",
+        "Content-Disposition": `attachment; filename="AGE-LAN-Ticket.pkpass"`,
+        "Cache-Control": "no-store" } });
+    }
+    return Response.redirect("https://pay.google.com/gp/v/save/" + await googleJwt(env, t), 302);
+  } catch (e) {
+    console.error(e);
+    return fehlerSeite(500, "Der Wallet-Pass konnte nicht erstellt werden. Bitte zeig beim Einlass das Ticket aus deinem Konto vor.");
+  }
+}
+
+// Gemeinsame Inhalte für beide Wallets
+function passDaten(env, t) {
+  const datum = t.lan.start ? (t.lan.ende && t.lan.ende !== t.lan.start
+    ? `${t.lan.start.split("-").reverse().join(".")} – ${t.lan.ende.split("-").reverse().join(".")}`
+    : t.lan.start.split("-").reverse().join(".")) : "Termin folgt";
+  return {
+    link: seiteUrl(env) + "#/t/" + t.code,
+    titel: t.lan.name || "AGE-LAN",
+    datum,
+    ort: [t.lan.ort, t.lan.adresse].filter(Boolean).join(", "),
+    status: t.status === "bezahlt" ? "Bezahlt" : "Zahlung offen",
+    sitz: t.typ.mitSitz ? (t.sitz || "wählst du online") : "ohne PC-Platz",
+    kurz: t.code.slice(0, 8).toUpperCase(),
+  };
+}
+
+// ---------- Apple: pass.json + Bilder → manifest (SHA-1) → PKCS#7-Signatur → ZIP ----------
+async function applePass(env, t) {
+  const d = passDaten(env, t);
+  const pass = {
+    formatVersion: 1,
+    passTypeIdentifier: env.APPLE_PASS_TYPE_ID,
+    teamIdentifier: env.APPLE_TEAM_ID,
+    serialNumber: t.code,
+    organizationName: "AGE-LAN",
+    description: "Ticket " + d.titel,
+    logoText: d.titel,
+    backgroundColor: "rgb(8, 9, 13)",
+    foregroundColor: "rgb(236, 233, 225)",
+    labelColor: "rgb(232, 182, 76)",
+    sharingProhibited: true,
+    barcodes: [{ format: "PKBarcodeFormatQR", message: d.link, messageEncoding: "iso-8859-1", altText: d.kurz }],
+    barcode: { format: "PKBarcodeFormatQR", message: d.link, messageEncoding: "iso-8859-1", altText: d.kurz },
+    eventTicket: {
+      primaryFields: [{ key: "gast", label: "GAST", value: t.nutzer.nick }],
+      secondaryFields: [
+        { key: "platz", label: "PLATZ", value: d.sitz },
+        { key: "termin", label: "TERMIN", value: d.datum, textAlignment: "PKTextAlignmentRight" },
+      ],
+      auxiliaryFields: [
+        { key: "ticket", label: "TICKET", value: t.typ.name },
+        { key: "status", label: "STATUS", value: d.status, textAlignment: "PKTextAlignmentRight" },
+      ],
+      backFields: [
+        { key: "ort", label: "Ort", value: d.ort || "–" },
+        { key: "hinweis", label: "Einlass", value: "Zeig diesen QR-Code beim Check-in vor. Danach öffnet der QR-Code deine Internet-Zugangsdaten." },
+        { key: "link", label: "Ticket online", value: d.link, attributedValue: `<a href="${d.link}">Ticket öffnen</a>` },
+        { key: "code", label: "Ticket-Code", value: t.code },
+      ],
+    },
+  };
+  if (t.lan.start) pass.relevantDate = t.lan.start + "T10:00:00+02:00";
+
+  const dateien = { "pass.json": enc.encode(JSON.stringify(pass)) };
+  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "logo.png", "logo@2x.png", "logo@3x.png"]) {
+    const res = await fetch(seiteUrl(env) + "img/wallet/" + name);
+    if (!res.ok) throw new Error("Bild fehlt: " + name);
+    dateien[name] = new Uint8Array(await res.arrayBuffer());
+  }
+  const manifest = {};
+  for (const [name, inhalt] of Object.entries(dateien)) manifest[name] = hex(new Uint8Array(await crypto.subtle.digest("SHA-1", inhalt)));
+  dateien["manifest.json"] = enc.encode(JSON.stringify(manifest));
+  dateien["signature"] = await pkcs7Signatur(env, dateien["manifest.json"]);
+  return zipBauen(dateien);
+}
+
+// --- DER/ASN.1 – nur das Nötigste für eine PKCS#7-Signatur ---
+function bytesVerbinden(teile) {
+  const flach = teile.map((x) => (x instanceof Uint8Array ? x : Uint8Array.from(x)));
+  const aus = new Uint8Array(flach.reduce((s, x) => s + x.length, 0));
+  let i = 0; for (const x of flach) { aus.set(x, i); i += x.length; }
+  return aus;
+}
+function der(tag, ...inhalt) {
+  const b = bytesVerbinden(inhalt);
+  let laenge;
+  if (b.length < 128) laenge = [b.length];
+  else { const l = []; for (let n = b.length; n > 0; n = Math.floor(n / 256)) l.unshift(n & 255); laenge = [0x80 | l.length, ...l]; }
+  return bytesVerbinden([[tag], laenge, b]);
+}
+const derOid = (hexOid) => der(0x06, Uint8Array.from(hexOid.match(/../g).map((h) => parseInt(h, 16))));
+const OID = {
+  daten: "2a864886f70d010701", signedData: "2a864886f70d010702", sha256: "608648016503040201",
+  rsa: "2a864886f70d010101", contentType: "2a864886f70d010903", messageDigest: "2a864886f70d010904", signingTime: "2a864886f70d010905",
+};
+function derLesen(b, i) {
+  const tag = b[i];
+  let l = b[i + 1], kopf = 2;
+  if (l & 0x80) { const n = l & 0x7f; l = 0; for (let k = 0; k < n; k++) l = l * 256 + b[i + 2 + k]; kopf += n; }
+  return { tag, start: i, inhalt: i + kopf, ende: i + kopf + l };
+}
+function derKinder(b, el) {
+  const k = []; for (let i = el.inhalt; i < el.ende;) { const x = derLesen(b, i); k.push(x); i = x.ende; } return k;
+}
+function pemZuDer(pem) {
+  const b64 = String(pem).replace(/\\n/g, "\n").replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  return unb64(b64);
+}
+async function privatSchluessel(pem) {
+  let key = pemZuDer(pem);
+  // "BEGIN RSA PRIVATE KEY" (PKCS#1) → in PKCS#8 einpacken
+  if (/BEGIN RSA PRIVATE KEY/.test(pem)) key = der(0x30, der(0x02, [0]), der(0x30, derOid(OID.rsa), [0x05, 0x00]), der(0x04, key));
+  return crypto.subtle.importKey("pkcs8", key, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+}
+function utcZeit(d) {
+  const z = (n) => String(n).padStart(2, "0");
+  return enc.encode(`${z(d.getUTCFullYear() % 100)}${z(d.getUTCMonth() + 1)}${z(d.getUTCDate())}${z(d.getUTCHours())}${z(d.getUTCMinutes())}${z(d.getUTCSeconds())}Z`);
+}
+async function pkcs7Signatur(env, inhalt) {
+  const zert = pemZuDer(env.APPLE_PASS_CERT);
+  const wwdr = pemZuDer(env.APPLE_WWDR_CERT);
+  // Aussteller + Seriennummer aus dem Zertifikat (TBSCertificate)
+  const tbs = derKinder(zert, derKinder(zert, derLesen(zert, 0))[0]);
+  const ab = tbs[0].tag === 0xa0 ? 1 : 0;
+  const serial = zert.slice(tbs[ab].start, tbs[ab].ende);
+  const aussteller = zert.slice(tbs[ab + 2].start, tbs[ab + 2].ende);
+  const sha256Alg = der(0x30, derOid(OID.sha256), [0x05, 0x00]);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", inhalt));
+  const attribute = [
+    der(0x30, derOid(OID.contentType), der(0x31, derOid(OID.daten))),
+    der(0x30, derOid(OID.signingTime), der(0x31, der(0x17, utcZeit(new Date())))),
+    der(0x30, derOid(OID.messageDigest), der(0x31, der(0x04, hash))),
+  ].sort((a, b) => { for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i]; return a.length - b.length; });
+  const zuSignieren = der(0x31, ...attribute);
+  const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", await privatSchluessel(env.APPLE_PASS_KEY), zuSignieren));
+  const signerInfo = der(0x30, der(0x02, [1]), der(0x30, aussteller, serial), sha256Alg,
+    der(0xa0, ...attribute), der(0x30, derOid(OID.rsa), [0x05, 0x00]), der(0x04, sig));
+  const signedData = der(0x30, der(0x02, [1]), der(0x31, sha256Alg), der(0x30, derOid(OID.daten)),
+    der(0xa0, zert, wwdr), der(0x31, signerInfo));
+  return der(0x30, derOid(OID.signedData), der(0xa0, signedData));
+}
+
+// --- ZIP ohne Kompression (reicht für .pkpass) ---
+let crcTabelle = null;
+function crc32(b) {
+  if (!crcTabelle) {
+    crcTabelle = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTabelle[n] = c >>> 0; }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < b.length; i++) c = crcTabelle[(c ^ b[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function zipBauen(dateien) {
+  const le = (n, bytes) => { const a = []; for (let i = 0; i < bytes; i++) a.push((n >>> (8 * i)) & 255); return a; };
+  const teile = [], verzeichnis = [];
+  let pos = 0;
+  for (const [name, daten] of Object.entries(dateien)) {
+    const n = enc.encode(name), crc = crc32(daten);
+    const kopf = bytesVerbinden([[0x50, 0x4b, 0x03, 0x04], le(20, 2), le(0, 2), le(0, 2), le(0, 2), le(0x21, 2),
+      le(crc, 4), le(daten.length, 4), le(daten.length, 4), le(n.length, 2), le(0, 2), n]);
+    verzeichnis.push(bytesVerbinden([[0x50, 0x4b, 0x01, 0x02], le(20, 2), le(20, 2), le(0, 2), le(0, 2), le(0, 2), le(0x21, 2),
+      le(crc, 4), le(daten.length, 4), le(daten.length, 4), le(n.length, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(pos, 4), n]));
+    teile.push(kopf, daten);
+    pos += kopf.length + daten.length;
+  }
+  const cd = bytesVerbinden(verzeichnis);
+  const ende = bytesVerbinden([[0x50, 0x4b, 0x05, 0x06], le(0, 2), le(0, 2), le(verzeichnis.length, 2), le(verzeichnis.length, 2),
+    le(cd.length, 4), le(pos, 4), le(0, 2)]);
+  return bytesVerbinden([...teile, cd, ende]);
+}
+
+// ---------- Google: signiertes JWT mit Klasse (LAN) + Objekt (Ticket) ----------
+async function googleJwt(env, t) {
+  const konto = JSON.parse(env.GOOGLE_WALLET_KEY);
+  const d = passDaten(env, t);
+  const issuer = String(env.GOOGLE_WALLET_ISSUER_ID).trim();
+  const de = (value) => ({ defaultValue: { language: "de", value: String(value) } });
+  const klasseId = `${issuer}.agelan-lan-${t.lanId}`;
+  const nutzlast = {
+    iss: konto.client_email, aud: "google", typ: "savetowallet", iat: Math.floor(Date.now() / 1000), origins: [],
+    payload: {
+      eventTicketClasses: [{
+        id: klasseId, issuerName: "AGE-LAN", reviewStatus: "UNDER_REVIEW",
+        eventName: de(d.titel),
+        venue: { name: de(t.lan.ort || "AGE-LAN"), address: de(t.lan.adresse || "–") },
+        logo: { sourceUri: { uri: seiteUrl(env) + "img/wallet/google-logo.png" } },
+        hexBackgroundColor: "#08090d",
+        ...(t.lan.start ? { dateTime: { start: t.lan.start + "T10:00:00+02:00", ...(t.lan.ende ? { end: t.lan.ende + "T18:00:00+02:00" } : {}) } } : {}),
+      }],
+      eventTicketObjects: [{
+        id: `${issuer}.ticket-${t.code}`, classId: klasseId, state: "ACTIVE",
+        ticketHolderName: t.nutzer.nick,
+        ticketType: de(t.typ.name),
+        seatInfo: { seat: de(d.sitz) },
+        barcode: { type: "QR_CODE", value: d.link, alternateText: d.kurz },
+        textModulesData: [
+          { id: "termin", header: "Termin", body: d.datum },
+          { id: "status", header: "Status", body: d.status },
+        ],
+        linksModuleData: { uris: [{ uri: d.link, description: "Ticket online öffnen", id: "ticket" }] },
+      }],
+    },
+  };
+  const kopf = b64url(enc.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+  const rumpf = b64url(enc.encode(JSON.stringify(nutzlast)));
+  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", await privatSchluessel(konto.private_key), enc.encode(kopf + "." + rumpf));
+  return kopf + "." + rumpf + "." + b64url(sig);
 }

@@ -1,6 +1,14 @@
-import { api, tokenSetzen } from "./api.js?v=12";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=12";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=12";
+import { api, tokenSetzen, walletUrl } from "./api.js?v=14";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=14";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=14";
+
+// Knöpfe „In die Wallet“ – nur, wenn der Worker dafür eingerichtet ist.
+function walletKnoepfe(code) {
+  const w = (zustand.daten && zustand.daten.wallet) || {};
+  if (!walletUrl("apple", code)) return "";
+  return (w.apple ? `<a class="knopf geist" href="${walletUrl("apple", code)}">Zu Apple Wallet hinzufügen</a>` : "")
+    + (w.google ? `<a class="knopf geist" href="${walletUrl("google", code)}" target="_blank" rel="noopener">In Google Wallet speichern</a>` : "");
+}
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -181,7 +189,7 @@ export async function render(main) {
         ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
       </div>`;
     ticketUnten = `<div class="abschnitt-kopf" style="margin-top:36px"><div><span class="ueberzeile">Zum Vorzeigen beim Einlass</span><h2 style="margin:0">Dein Ticket</h2></div>
-        <div class="zeile"><button class="knopf primaer" data-drucken>Drucken / als PDF</button>
+        <div class="zeile"><button class="knopf primaer" data-drucken>Drucken / als PDF</button>${t.status !== "storniert" ? walletKnoepfe(t.code) : ""}
         ${t.status === "offen" ? `<button class="knopf geist" data-storno>Bestellung stornieren</button>` : ""}</div></div>
       <div style="max-width:900px">${ticketHtml(t)}</div>`;
   }
@@ -334,7 +342,8 @@ export async function renderTicketSeite(main, code) {
       ${t.eingecheckt || t.status === "storniert" ? "" : `<button class="knopf" data-neu>↻ Neu laden</button>`}</div>`}
     <div class="karte" style="margin-top:16px"><dl class="daten-liste"><dt>Ticket</dt><dd>${esc(t.typ)}</dd>
       ${t.mitSitz ? `<dt>Platz</dt><dd><b class="gold">${esc(t.sitz || "noch keiner")}</b></dd>` : ""}${t.gruppe ? `<dt>Gruppe</dt><dd>${esc(t.gruppe)}</dd>` : ""}
-      <dt>Ort</dt><dd>${esc(t.lan.ort)}</dd></dl></div></div>`;
+      <dt>Ort</dt><dd>${esc(t.lan.ort)}</dd></dl>
+      ${t.status !== "storniert" && /^[0-9a-f]{32}$/i.test(code) && walletKnoepfe(code.toLowerCase()) ? `<div class="zeile" style="margin-top:14px">${walletKnoepfe(code.toLowerCase())}</div>` : ""}</div></div>`;
   kopierenVerdrahten(main);
   const neu = $("[data-neu]", main);
   if (neu) neu.onclick = () => renderTicketSeite(main, code);

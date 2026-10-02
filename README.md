@@ -10,7 +10,8 @@ Nachfolger für age-lan.de bzw. das alte Dota-LAN-Admin-Panel. Später soll das 
 | **QR-Ticket** | Druckbares Ticket mit QR-Code (`AGELAN:<32 hex>`), Code in Vierergruppen wie beim alten Ticket |
 | **Sitzplan** | Gäste wählen selbst; Reservierungsgruppen mit Code, vorgemerkten Plätzen und Haltefrist |
 | **Sitzplan-Editor** | Plätze setzen, Tischblöcke einfügen, verschieben, umbenennen, sperren; Flächen, Texte und Wände zeichnen |
-| **Check-in** | QR-Code mit der Kamera scannen oder Gast suchen, Status prüfen (bezahlt? U18?), Bar-Zahlung kassieren, einchecken. Kein Drucker: Der Ticket-QR ist ein Link – der Gast scannt ihn nach dem Check-in mit dem Handy und sieht seine **Internet-Zugangsdaten (OTP)** |
+| **Check-in** | QR-Code mit Handy-Kamera, Webcam (Kamera wählbar) oder USB-Handscanner scannen oder Gast suchen, Status prüfen (bezahlt? U18?), Bar-Zahlung kassieren, einchecken. Kein Drucker: Der Ticket-QR ist ein Link – der Gast scannt ihn nach dem Check-in mit dem Handy und sieht seine **Internet-Zugangsdaten (OTP)** |
+| **Wallet** | Ticket als Apple-Wallet-Pass bzw. Google-Wallet-Karte (`/wallet/apple|google/<code>`), aktiv sobald die Secrets gesetzt sind – siehe `pflege/wallet.md` |
 | **Verwaltung** | Übersicht, Gäste & Zahlungen (Filter, CSV), Gruppen, Internet & Geräte (Portal-Anmeldungen, Suche nach MAC/IP), Ticketsorten, Gutscheine, News, LANs, Einstellungen, Benutzer (Rollen, Passwort zurücksetzen, Ticket anlegen), Protokoll |
 
 Rollen: **Gast** · **Orga** (Check-in, Zahlungen bestätigen) · **Veranstalter** (alles).

@@ -1,12 +1,12 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=12";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=12";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=12";
+import { api } from "./api.js?v=14";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=14";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=14";
 
 // jsQR (1.4.0, UMD, setzt window.jsQR) liegt lokal neben diesem Modul.
-const JSQR = new URL("./jsqr.js?v=12", import.meta.url).href;
+const JSQR = new URL("./jsqr.js?v=14", import.meta.url).href;
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);
@@ -62,6 +62,16 @@ export async function qrErkenner() {
   return { erkennen, art: () => (detector ? "BarcodeDetector + jsQR" : "jsQR") };
 }
 
+// Aus Kamera- oder Handscanner-Text den Ticket-Code holen. Handscanner mit
+// falschem Tastaturlayout machen aus "/" und ":" andere Zeichen – die 32 hex
+// Zeichen des Codes bleiben aber gleich.
+export function scanText(roh) {
+  const m = String(roh || "").match(/(?:^|[^0-9a-f])([0-9a-f]{32})(?![0-9a-f])/i);
+  return m ? m[1].toLowerCase() : String(roh || "").trim();
+}
+
+const KAMERA_KEY = "checkin-kamera";
+
 function skriptLaden(src) {
   return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { s.remove(); no(new Error("Skript nicht geladen")); }; document.head.appendChild(s); });
 }
@@ -80,7 +90,9 @@ export async function render(main, param) {
         <div class="scanner" id="c-scanner"><video playsinline muted></video><div class="rahmen"></div><div class="hinweis" id="c-hinweis">Kamera starten, um QR-Codes zu scannen</div></div>
         <div class="zeile"><button class="knopf primaer" id="c-kamera">Kamera starten</button>
           <form id="c-suche" class="zeile" style="flex:1"><input name="q" placeholder="Code, Nick, Name oder Platz …" style="flex:1;min-width:160px" autocomplete="off"><button class="knopf">Suchen</button></form></div>
-        <div class="klein leiser" id="c-technik"></div>
+        <div class="zeile klein leiser" style="justify-content:space-between"><span id="c-technik"></span>
+          <select id="c-kameras" class="versteckt" style="width:auto;max-width:100%" title="Kamera wählen"></select></div>
+        <p class="klein leise" style="margin:0">Handscanner: einfach scannen, ein Klick ins Suchfeld ist nicht nötig.</p>
         <div class="karte"><h3>Zuletzt eingecheckt</h3><div id="c-zuletzt" class="leise klein">Noch niemand in dieser Sitzung.</div></div>
       </div>
       <div id="c-ergebnis"><div class="leer">Scanne ein Ticket oder suche nach einem Gast.</div></div>
@@ -142,7 +154,8 @@ export async function render(main, param) {
       <span><b style="color:var(--text)">${esc(t.nutzer.nick)}</b> · ${esc(t.sitz || "–")}</span><span>${esc(zeit(t.checkinAt).split(", ")[1] || "")}</span></div>`).join("");
   };
 
-  const suchen = async (eingabe) => {
+  const suchen = async (roh) => {
+    const eingabe = scanText(roh);
     try {
       const r = await api("checkinSuchen", { code: eingabe });
       if (!r.treffer.length) {
@@ -185,8 +198,11 @@ export async function render(main, param) {
       let s;
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Der Browser erlaubt hier keinen Kamerazugriff (nur über https).");
+        let gewaehlt = "";
+        try { gewaehlt = localStorage.getItem(KAMERA_KEY) || ""; } catch (e) { /* privat */ }
+        const wunsch = { width: { ideal: 1280 }, height: { ideal: 720 } };
         try {
-          s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+          s = await navigator.mediaDevices.getUserMedia({ video: gewaehlt ? { ...wunsch, deviceId: { exact: gewaehlt } } : { ...wunsch, facingMode: { ideal: "environment" } }, audio: false });
         } catch (e) {
           if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) throw e;
           s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); // ältere Geräte: ohne Wünsche
@@ -215,6 +231,7 @@ export async function render(main, param) {
       knopf.textContent = "Kamera stoppen";
       hinweis.textContent = "QR-Code in den Rahmen halten";
       $("#c-technik", main).textContent = `${erkenner.art()} · ${video.videoWidth}×${video.videoHeight}`;
+      kamerasZeigen(s).catch(() => { /* Auswahl ist nur Komfort */ });
       const schleife = async () => {
         if (!laeuft || veraltet()) return;
         try {
@@ -239,6 +256,55 @@ export async function render(main, param) {
       knopf.disabled = false;
     }
   };
-  beimVerlassen(() => { verlassen = true; laeuft = false; kameraStoppen(); }, main);
+  // Mehrere Kameras (Laptop + USB-Webcam, Handy vorne/hinten): Auswahl anbieten.
+  // Die Namen gibt der Browser erst nach der Kamera-Freigabe heraus.
+  const auswahl = $("#c-kameras", main);
+  const kamerasZeigen = async (s) => {
+    const geraete = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+    if (geraete.length < 2) { auswahl.classList.add("versteckt"); return; }
+    const aktiv = (s.getVideoTracks()[0].getSettings() || {}).deviceId || "";
+    auswahl.innerHTML = geraete.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === aktiv ? "selected" : ""}>${esc(d.label || "Kamera " + (i + 1))}</option>`).join("");
+    auswahl.classList.remove("versteckt");
+  };
+  auswahl.onchange = async () => {
+    try { localStorage.setItem(KAMERA_KEY, auswahl.value); } catch (e) { /* privat */ }
+    if (laeuft) { stoppen(); knopf.click(); }
+  };
+
+  // ---- Handscanner ----
+  // USB-/Bluetooth-Scanner tippen wie eine Tastatur, nur viel schneller als ein
+  // Mensch, und schließen mit Enter ab. Schnelle Folge + Enter = Scan, egal wo
+  // gerade der Cursor steht. Was der Scanner dabei in ein Feld getippt hat,
+  // wird wieder entfernt.
+  let puffer = "", zuletztTaste = 0, feld = null, feldVorher = "";
+  const taste = (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const jetzt = performance.now();
+    if (e.key === "Enter" || e.key === "Tab") { // manche Scanner schließen mit Tab ab
+      const schnell = puffer.length >= 16 && jetzt - zuletztTaste < 120;
+      const text = puffer;
+      puffer = "";
+      if (!schnell) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (feld && feld.isConnected) feld.value = feldVorher;
+      angezeigt = "";
+      suchen(text).then(() => { if (matchMedia("(max-width: 900px)").matches) ergebnis.scrollIntoView({ behavior: "smooth", block: "start" }); });
+      return;
+    }
+    if (e.key.length !== 1) return; // Shift usw.
+    if (jetzt - zuletztTaste > 60) {
+      // neue Folge – merken, wie das Feld vorher aussah
+      puffer = "";
+      const a = document.activeElement;
+      feld = a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA") ? a : null;
+      feldVorher = feld ? feld.value : "";
+    }
+    puffer += e.key;
+    zuletztTaste = jetzt;
+  };
+  document.addEventListener("keydown", taste, true);
+
+  beimVerlassen(() => { verlassen = true; laeuft = false; kameraStoppen(); document.removeEventListener("keydown", taste, true); }, main);
   if (param) { $("#c-suche", main).q.value = param; suchen(param); }
 }
