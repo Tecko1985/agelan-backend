@@ -1,11 +1,12 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=6";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=6";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=6";
+import { api } from "./api.js?v=7";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=7";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=7";
 
-const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+// jsQR (1.4.0, UMD, setzt window.jsQR) liegt lokal neben diesem Modul.
+const JSQR = new URL("./jsqr.js?v=7", import.meta.url).href;
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);
@@ -16,13 +17,15 @@ function alterAm(geb, stichtag) {
 }
 
 let stream = null;
+let generation = 0; // jeder Stopp macht laufende Starts ungültig
 function kameraStoppen() {
+  generation++;
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null;
 }
 
 function skriptLaden(src) {
-  return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+  return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { s.remove(); no(new Error("Skript nicht geladen")); }; document.head.appendChild(s); });
 }
 
 export async function render(main, param) {
@@ -45,7 +48,13 @@ export async function render(main, param) {
     </div></div>`;
 
 
-  const ergebnis = $("#c-ergebnis");
+  const ergebnis = $("#c-ergebnis", main);
+  const LEER = `<div class="leer">Scanne ein Ticket oder suche nach einem Gast.</div>`;
+  let angezeigt = ""; // zuletzt gescannter Code, solange seine Ergebniskarte sichtbar ist
+  const weiterVerdrahten = () => {
+    const w = $("[data-weiter]", ergebnis);
+    if (w) w.onclick = () => { angezeigt = ""; ergebnis.innerHTML = LEER; };
+  };
 
   const zeigen = (t, hinweis = "") => {
     const alter = alterAm(t.nutzer.geburtsdatum, t.lan.start);
@@ -75,9 +84,11 @@ export async function render(main, param) {
         ${t.status === "storniert" || t.lanId !== lan.id ? "" : t.status === "offen"
           ? `<button class="knopf gruen gross" data-bar>${euro(t.preisCent)} bar kassiert + einchecken</button>`
           : t.checkinAt ? "" : `<button class="knopf gruen gross" data-checkin>✓ Einchecken</button>`}
+        <button class="knopf geist" data-weiter>Weiter</button>
       </div></div>`;
+    weiterVerdrahten();
     const ausfuehren = (knopf, jetztBezahlt) => mitSperre(knopf, async () => {
-      const r = await api("checkin", { ticketId: t.id, jetztBezahlt, zahlart: "bar", orgaNotiz: $("#c-notiz").value });
+      const r = await api("checkin", { ticketId: t.id, jetztBezahlt, zahlart: "bar", orgaNotiz: $("#c-notiz", ergebnis).value });
       toast(t.nutzer.nick + " ist eingecheckt ✓", "ok");
       zuletzt.unshift(r.ticket);
       zuletztZeichnen();
@@ -88,14 +99,19 @@ export async function render(main, param) {
   };
 
   const zuletztZeichnen = () => {
-    $("#c-zuletzt").innerHTML = zuletzt.slice(0, 12).map((t) => `<div class="zeile zwischen" style="padding:5px 0;border-bottom:1px dashed var(--rand)">
+    $("#c-zuletzt", main).innerHTML = zuletzt.slice(0, 12).map((t) => `<div class="zeile zwischen" style="padding:5px 0;border-bottom:1px dashed var(--rand)">
       <span><b style="color:var(--text)">${esc(t.nutzer.nick)}</b> · ${esc(t.sitz || "–")}</span><span>${esc(zeit(t.checkinAt).split(", ")[1] || "")}</span></div>`).join("");
   };
 
   const suchen = async (eingabe) => {
     try {
       const r = await api("checkinSuchen", { code: eingabe });
-      if (!r.treffer.length) { ergebnis.innerHTML = `<div class="karte ergebnis fehler"><h3>Nichts gefunden</h3><p class="leise">Kein Ticket zu „${esc(eingabe)}“.</p></div>`; return; }
+      if (!r.treffer.length) {
+        ergebnis.innerHTML = `<div class="karte ergebnis fehler"><h3>Nichts gefunden</h3><p class="leise">Kein Ticket zu „${esc(eingabe)}“.</p>
+          <button class="knopf geist" data-weiter>Weiter</button></div>`;
+        weiterVerdrahten();
+        return;
+      }
       if (r.treffer.length === 1) { zeigen(r.treffer[0]); return; }
       ergebnis.innerHTML = `<div class="karte"><h3>${r.treffer.length} Treffer</h3>${r.treffer.map((t, i) => `<button class="knopf voll" style="justify-content:space-between;margin-bottom:6px" data-i="${i}">
         <span>${esc(t.nutzer.nick)} <span class="leise">(${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)})</span></span><span>${t.checkinAt ? "✓ " : ""}${esc(t.sitz || "–")}</span></button>`).join("")}</div>`;
@@ -103,51 +119,83 @@ export async function render(main, param) {
     } catch (e) { fehler(e); }
   };
 
-  $("#c-suche").onsubmit = (e) => { e.preventDefault(); const q = e.target.q.value.trim(); if (q) suchen(q); };
+  $("#c-suche", main).onsubmit = (e) => { e.preventDefault(); const q = e.target.q.value.trim(); if (q) { angezeigt = ""; suchen(q); } };
 
   // ---- Kamera ----
-  let laeuft = false, letzter = "", letzterZeit = 0;
-  $("#c-kamera").onclick = async () => {
-    if (laeuft) { laeuft = false; kameraStoppen(); $("#c-kamera").textContent = "Kamera starten"; $("#c-hinweis").textContent = "Kamera gestoppt"; return; }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-    } catch (e) { fehler(new Error("Kamera nicht verfügbar: " + e.message)); return; }
-    const video = $("#c-scanner video");
-    video.srcObject = stream;
-    await video.play();
-    laeuft = true;
-    $("#c-kamera").textContent = "Kamera stoppen";
-    $("#c-hinweis").textContent = "QR-Code in den Rahmen halten";
-    let detector = null;
-    if ("BarcodeDetector" in window) { try { detector = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { detector = null; } }
-    if (!detector && !window.jsQR) await skriptLaden(JSQR);
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    const schleife = async () => {
-      if (!laeuft) return;
-      try {
-        let text = "";
-        if (video.readyState >= 2) {
-          if (detector) {
-            const codes = await detector.detect(video);
-            if (codes.length) text = codes[0].rawValue;
-          } else {
-            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
-            const r = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
-            if (r) text = r.data;
-          }
-        }
-        if (text && (text !== letzter || Date.now() - letzterZeit > 4000)) {
-          letzter = text; letzterZeit = Date.now();
-          if (navigator.vibrate) navigator.vibrate(80);
-          await suchen(text);
-        }
-      } catch (e) { /* Bild verpasst – weiter */ }
-      setTimeout(schleife, 180);
-    };
-    schleife();
+  const knopf = $("#c-kamera", main);
+  const hinweis = $("#c-hinweis", main);
+  const video = $("#c-scanner video", main);
+  let laeuft = false, startet = false, verlassen = false;
+  const stoppen = (text) => {
+    laeuft = false;
+    kameraStoppen();
+    video.srcObject = null;
+    knopf.textContent = "Kamera starten";
+    if (text) hinweis.textContent = text;
   };
-  beimVerlassen(() => { laeuft = false; kameraStoppen(); });
-  if (param) { $("#c-suche").q.value = param; suchen(param); }
+  knopf.onclick = async () => {
+    if (startet) return;
+    if (laeuft) { stoppen("Kamera gestoppt"); return; }
+    startet = true;
+    knopf.disabled = true;
+    kameraStoppen();
+    const gen = generation;
+    // Nach jedem await: Seite verlassen oder Kamera inzwischen gestoppt? Dann nichts mehr anfassen.
+    const veraltet = () => verlassen || gen !== generation;
+    try {
+      let s;
+      try {
+        s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      } catch (e) { throw new Error("Kamera nicht verfügbar: " + e.message); }
+      if (veraltet()) { s.getTracks().forEach((t) => t.stop()); return; }
+      stream = s;
+      video.srcObject = s;
+      try { await video.play(); } catch (e) { throw new Error("Kamerabild lässt sich nicht abspielen: " + e.message); }
+      if (veraltet()) return;
+      let detector = null;
+      if ("BarcodeDetector" in window) { try { detector = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { detector = null; } }
+      if (!detector && !window.jsQR) {
+        try { await skriptLaden(JSQR); } catch (e) { /* unten gemeldet */ }
+        if (veraltet()) return;
+        if (!window.jsQR) throw new Error("QR-Erkennung konnte nicht geladen werden. Bitte über die Suche einchecken.");
+      }
+      laeuft = true;
+      knopf.textContent = "Kamera stoppen";
+      hinweis.textContent = "QR-Code in den Rahmen halten";
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const schleife = async () => {
+        if (!laeuft || veraltet()) return;
+        try {
+          let text = "";
+          if (video.readyState >= 2) {
+            if (detector) {
+              const codes = await detector.detect(video);
+              if (codes.length) text = codes[0].rawValue;
+            } else {
+              canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+              ctx.drawImage(video, 0, 0);
+              const r = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
+              if (r) text = r.data;
+            }
+          }
+          // Derselbe Code wird nicht erneut gesucht, solange seine Karte sichtbar ist.
+          if (text && text !== angezeigt && !veraltet()) {
+            angezeigt = text;
+            if (navigator.vibrate) navigator.vibrate(80);
+            await suchen(text);
+          }
+        } catch (e) { /* Bild verpasst – weiter */ }
+        setTimeout(schleife, 180);
+      };
+      schleife();
+    } catch (e) {
+      if (!veraltet()) { fehler(e); stoppen("Kamera nicht verfügbar"); }
+    } finally {
+      startet = false;
+      knopf.disabled = false;
+    }
+  };
+  beimVerlassen(() => { verlassen = true; laeuft = false; kameraStoppen(); }, main);
+  if (param) { $("#c-suche", main).q.value = param; suchen(param); }
 }

@@ -1,7 +1,7 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api } from "./api.js?v=6";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=6";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken } from "./ui.js?v=6";
+import { api } from "./api.js?v=7";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=7";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=7";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -20,6 +20,10 @@ const REITER = [
 const ZAHLARTEN = { paypal: "PayPal", ueberweisung: "Überweisung", bar: "Bar" };
 let reiter = "uebersicht";
 let lanId = null;
+let planModul = null; // Sitzplan-Editor, sobald einmal geladen
+
+// Reiter-/LAN-Wechsel: bei ungespeichertem Sitzplan erst nachfragen.
+const darfWechseln = async () => !planModul || planModul.verlassenErlaubt();
 
 export async function render(main, param) {
   await neuLaden();
@@ -29,24 +33,30 @@ export async function render(main, param) {
   if (!lanId || !lans.some((l) => l.id === lanId)) lanId = (lans.find((l) => l.aktiv) || lans[0]).id;
   main.innerHTML = `<div class="wrap admin-layout">
     <nav class="admin-nav">
-      <div style="padding:0 6px 10px"><select id="a-lan" title="LAN">${lans.map((l) => `<option value="${l.id}" ${l.id === lanId ? "selected" : ""}>${esc(l.name)}${l.aktiv ? " " : ""}</option>`).join("")}</select></div>
+      <div style="padding:0 6px 10px"><select id="a-lan" title="LAN">${lans.map((l) => `<option value="${l.id}" ${l.id === lanId ? "selected" : ""}>${esc(l.name)}${l.aktiv ? " (aktiv)" : ""}</option>`).join("")}</select></div>
       ${REITER.filter(([, , nurAdmin]) => !nurAdmin || istAdmin()).map(([k, l]) => (k === "-" ? (istAdmin() ? `<div class="trenner">${l}</div>` : "") : `<button data-r="${k}" class="${k === reiter ? "aktiv" : ""}">${l}</button>`)).join("")}
       <a class="knopf klein" style="margin:12px 6px 0" href="#/checkin">Check-in öffnen</a>
     </nav>
     <section id="a-inhalt"><div class="lade">Lädt …</div></section></div>`;
-  $("#a-lan").onchange = (e) => { lanId = Number(e.target.value); zeigen(); };
-  $$("[data-r]", main).forEach((b) => (b.onclick = () => {
+  const box = $("#a-inhalt", main);
+  $("#a-lan", main).onchange = async (e) => {
+    if (!(await darfWechseln())) { e.target.value = lanId; return; }
+    lanId = Number(e.target.value);
+    zeigen(box);
+  };
+  $$("[data-r]", main).forEach((b) => (b.onclick = async () => {
+    if (!(await darfWechseln())) return;
     reiter = b.dataset.r;
     $$("[data-r]", main).forEach((x) => x.classList.toggle("aktiv", x === b));
     history.replaceState(null, "", "#/admin/" + reiter);
-    zeigen();
+    zeigen(box);
   }));
-  zeigen();
+  zeigen(box);
 }
 
-async function zeigen() {
-  const box = $("#a-inhalt");
-  if (!box) return;
+async function zeigen(box) {
+  if (!box || !box.isConnected) return;
+  if (planModul) planModul.schliessen();
   box.innerHTML = `<div class="lade">Lädt …</div>`;
   try {
     await ({ uebersicht, gaeste, gruppen, plan, tickettypen, gutscheine, news, lans, einstellungen, benutzer, protokoll }[reiter] || uebersicht)(box);
@@ -119,7 +129,7 @@ async function gaeste(box) {
   };
   const zeichnen = () => {
     const l = liste();
-    $("#a-liste").innerHTML = l.map((t) => `<tr>
+    $("#a-liste", box).innerHTML = l.map((t) => `<tr>
       <td><b>${esc(t.nutzer.nick)}</b><div class="klein leise">${esc(t.nutzer.vorname)} ${esc(t.nutzer.nachname)}</div>${t.notiz ? `<div class="klein gold" title="${esc(t.notiz)}">${esc(t.notiz.slice(0, 40))}</div>` : ""}</td>
       <td class="klein">${esc(t.typ.name)}</td><td>${statusAbzeichen(t)}${t.bezahltAt ? `<div class="klein leise">${esc(zeit(t.bezahltAt))}</div>` : ""}</td>
       <td class="klein">${esc(t.zahlartText)}</td><td class="zahl">${euro(t.preisCent)}</td><td class="klein">${esc(t.gruppe)}</td>
@@ -129,17 +139,17 @@ async function gaeste(box) {
       <td style="white-space:nowrap">${t.status === "offen" ? `<button class="knopf klein gruen" data-bezahlt="${t.id}" title="Zahlung bestätigen">✓ Bezahlt</button>` : ""}
         <button class="knopf klein" data-details="${t.id}">Details</button></td></tr>`).join("") || `<tr><td colspan="10" class="leise">Keine Treffer.</td></tr>`;
     const bez = l.filter((t) => t.status === "bezahlt");
-    $("#a-summe").textContent = `${l.length} angezeigt · ${bez.length} bezahlt (${euro(bez.reduce((s, t) => s + t.preisCent, 0))}) · offen ${euro(l.filter((t) => t.status === "offen").reduce((s, t) => s + t.preisCent, 0))}`;
+    $("#a-summe", box).textContent = `${l.length} angezeigt · ${bez.length} bezahlt (${euro(bez.reduce((s, t) => s + t.preisCent, 0))}) · offen ${euro(l.filter((t) => t.status === "offen").reduce((s, t) => s + t.preisCent, 0))}`;
     $$("[data-bezahlt]", box).forEach((b) => (b.onclick = () => mitSperre(b, async () => {
       const r = await api("adminBezahlt", { ticketId: Number(b.dataset.bezahlt), bezahlt: true });
       Object.assign(d.tickets.find((t) => t.id === r.ticket.id), r.ticket);
       toast("Zahlung von " + r.ticket.nutzer.nick + " bestätigt.", "ok");
       zeichnen();
     })));
-    $$("[data-details]", box).forEach((b) => (b.onclick = () => ticketDetails(d.tickets.find((t) => t.id === Number(b.dataset.details)), (neu) => {
+    $$("[data-details]", box).forEach((b) => (b.onclick = () => mitSperre(b, () => ticketDetails(d.tickets.find((t) => t.id === Number(b.dataset.details)), (neu) => {
       if (neu) Object.assign(d.tickets.find((t) => t.id === neu.id), neu);
       zeichnen();
-    })));
+    }))));
   };
   $$("[data-f]", box).forEach((i) => (i.oninput = zeichnen));
   $("[data-csv]", box).onclick = () => {
@@ -182,23 +192,29 @@ async function ticketDetails(t, fertig) {
         ${admin && t.status !== "storniert" ? `<button type="button" class="knopf rot" data-storno>Stornieren</button>` : ""}</div>
     </form></div>`, { breit: true });
   const f = $("[data-form]", m.el);
-  const aktion = (fn) => async (e) => {
-    const b = e.currentTarget;
-    await mitSperre(b, async () => { const r = await fn(); if (r && r.ticket) { m.schliessen(); fertig(r.ticket); } });
-  };
+  const aktion = (knopf, fn) => mitSperre(knopf, async () => { const r = await fn(); if (r && r.ticket) { m.schliessen(); fertig(r.ticket); } });
   f.onsubmit = (e) => {
     e.preventDefault();
     mitSperre($("button", f), async () => {
       const v = formDaten(f);
       try {
         let neu = t;
+        // Zahlungsstatus über adminBezahlt (setzt beim Bestätigen auch die Zahlart).
         if (v.bezahlt !== undefined && (v.bezahlt === "1") !== (t.status === "bezahlt")) neu = (await api("adminBezahlt", { ticketId: t.id, bezahlt: v.bezahlt === "1", zahlart: v.zahlart })).ticket;
-        const aend = { ticketId: t.id, orgaNotiz: v.orgaNotiz };
+        // Alles andere über adminTicketAendern – nur geänderte Felder. Notiz und Zahlart darf auch die Orga.
+        const aend = { ticketId: t.id };
+        if (v.orgaNotiz !== (t.orgaNotiz || "")) aend.orgaNotiz = v.orgaNotiz;
+        if (v.zahlart !== undefined && v.zahlart !== neu.zahlart) aend.zahlart = v.zahlart;
         if (admin && t.status !== "storniert") {
           if (Number(v.typId) !== t.typ.id) aend.typId = Number(v.typId);
-          const cent = Math.round(Number(v.preis) * 100);
-          if (cent !== t.preisCent) aend.preisCent = cent;
-          if (v.sitz.trim() !== t.sitz) {
+          // Leeres Preisfeld = Preis unverändert
+          if (String(v.preis).trim() !== "") {
+            const cent = Math.round(Number(v.preis) * 100);
+            if (!Number.isFinite(cent) || cent < 0) throw new Error("Bitte einen gültigen Preis eingeben.");
+            if (cent !== t.preisCent) aend.preisCent = cent;
+          }
+          const sitzAlt = t.sitz || "";
+          if (v.sitz.trim() !== sitzAlt) {
             if (!v.sitz.trim()) aend.sitzId = "";
             else {
               const plan = await api("sitzplan", { lanId: t.lanId });
@@ -207,26 +223,24 @@ async function ticketDetails(t, fertig) {
               aend.sitzId = s.id;
             }
           }
-          if (v.zahlart !== t.zahlart && neu.status === t.status) { /* Zahlart allein: über adminBezahlt nur beim Statuswechsel */ }
-          neu = (await api("adminTicketAendern", aend)).ticket;
-        } else if (v.orgaNotiz !== t.orgaNotiz && istOrga()) {
-          neu = (await api("adminTicketAendern", aend).catch(() => ({ ticket: neu }))).ticket;
         }
+        if (Object.keys(aend).length > 1) neu = (await api("adminTicketAendern", aend)).ticket;
         m.schliessen(); toast("Gespeichert.", "ok"); fertig(neu);
       } catch (err) { $(".fehler-text", f).textContent = err.message; }
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=6");
+    const { ticketHtml } = await import("./konto.js?v=7");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
-  const otp = $("[data-otp]", m.el); if (otp) otp.onclick = aktion(() => api("adminTicketAendern", { ticketId: t.id, otpNeu: true }));
-  const co = $("[data-checkout]", m.el); if (co) co.onclick = aktion(() => api("checkinZuruecknehmen", { ticketId: t.id }));
+  const otp = $("[data-otp]", m.el); if (otp) otp.onclick = () => aktion(otp, () => api("adminTicketAendern", { ticketId: t.id, otpNeu: true }));
+  const co = $("[data-checkout]", m.el); if (co) co.onclick = () => aktion(co, () => api("checkinZuruecknehmen", { ticketId: t.id }));
   const sto = $("[data-storno]", m.el);
-  if (sto) sto.onclick = async (e) => {
+  // Knopf vorher festhalten: nach dem await der Rückfrage ist e.currentTarget null.
+  if (sto) sto.onclick = async () => {
     if (!(await bestaetigen(`Ticket von ${t.nutzer.nick} stornieren? Der Platz wird frei.`, { ja: "Stornieren", gefahr: true }))) return;
-    aktion(() => api("adminTicketAendern", { ticketId: t.id, status: "storniert" }))(e);
+    aktion(sto, () => api("adminTicketAendern", { ticketId: t.id, status: "storniert" }));
   };
 }
 
@@ -237,8 +251,8 @@ async function gruppen(box) {
     <div class="karte"><div class="karte-kopf"><div><h3 style="margin:0">${esc(g.name)}</h3><div class="klein leise">Leitung: ${esc(g.leitung)} · Code <span class="mono gold">${esc(g.code)}</span></div></div>
       <span class="abzeichen ${g.aktiv ? "blau" : "rot"}">${g.aktiv ? "Plätze " + g.fuellung : "abgelaufen"}</span></div>
       <div class="klein" style="margin-bottom:8px">${g.sitze.map((s) => `<span class="abzeichen ${s.besetzt ? "rot" : "blau"}">${esc(s.label)}</span>`).join(" ") || `<span class="leise">keine Plätze vorgemerkt</span>`}</div>
-      <div class="klein leise" style="margin-bottom:10px">Mitglieder: ${g.mitglieder.map((m) => esc(m.nick) + (m.sitz ? " (" + esc(m.sitz) + ")" : "") + (m.ticket ? "" : " ")).join(", ")}</div>
-      ${istAdmin() ? `<div class="zeile"><label class="klein leise">Hält bis <input type="date" data-ablauf="${g.id}" value="${new Date(g.ablauf).toISOString().slice(0, 10)}" style="width:auto;padding:5px"></label>
+      <div class="klein leise" style="margin-bottom:10px">Mitglieder: ${g.mitglieder.map((m) => esc(m.nick) + (m.sitz ? " (" + esc(m.sitz) + ")" : "") + (m.ticket ? "" : " (ohne Ticket)")).join(", ")}</div>
+      ${istAdmin() ? `<div class="zeile"><label class="klein leise">Hält bis <input type="date" data-ablauf="${g.id}" value="${berlinIso(g.ablauf)}" style="width:auto;padding:5px"></label>
         <button class="knopf klein" data-sitze="${g.id}">Plätze ändern</button><button class="knopf klein rot" data-loeschen="${g.id}">Auflösen</button></div>` : ""}
     </div>`).join("")}</div>` : `<div class="leer">Noch keine Gruppen.</div>`);
   $$("[data-ablauf]", box).forEach((i) => (i.onchange = async () => {
@@ -267,7 +281,8 @@ async function gruppen(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  (await import("./planeditor.js?v=6")).editor($("#a-editor"), lanId);
+  planModul = await import("./planeditor.js?v=7");
+  await planModul.editor($("#a-editor", box), lanId);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +293,7 @@ async function tickettypen(box) {
     ${ts.map((t) => `<tr><td class="leise">${t.sort}</td><td><b>${esc(t.name)}</b>${t.extras.length ? `<div class="klein leise">+ ${t.extras.map((x) => esc(x.name)).join(", ")}</div>` : ""}</td><td class="zahl">${euro(t.preisCent)}</td>
       <td>${t.mitSitz ? "✓" : "–"}</td><td>${t.aktiv ? "✓" : "–"}</td><td>${t.kaufbar ? "✓" : "–"}</td><td class="zahl">${t.verkauft} / ${t.limit || "∞"}</td>
       <td class="klein">${t.von ? datum(t.von) : ""}${t.von || t.bis ? " – " : ""}${t.bis ? datum(t.bis) : ""}</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}"></button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}">Löschen</button>`}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="klein leise" style="margin-top:8px">„Aktiv“ = auf der Website sichtbar, „Kaufbar“ = kann bestellt werden. Nicht kaufbare Sorten (z. B. Orga/Free) vergibst du unter Benutzer → Ticket anlegen.</p>`;
   const bearbeiten = (t = { sort: ts.length + 1, name: "", beschreibung: "", features: [], preisCent: 0, extras: [], mitSitz: true, aktiv: true, kaufbar: true, limit: 0, von: "", bis: "" }) => {
@@ -319,15 +334,22 @@ async function gutscheine(box) {
     <form class="karte zeile" style="margin-bottom:16px;align-items:end" data-neu>
       <label class="feld" style="flex:1;min-width:120px"><span>Code (leer = zufällig)</span><input name="code"></label>
       <label class="feld"><span>Art</span><select name="typ"><option value="betrag">Betrag (€)</option><option value="prozent">Prozent</option></select></label>
-      <label class="feld" style="width:100px"><span>Wert</span><input name="wert" type="number" min="1" required></label>
+      <label class="feld" style="width:100px"><span>Wert</span><input name="wert" type="number" min="0.01" step="0.01" required></label>
       <label class="feld" style="flex:1;min-width:140px"><span>Bezeichnung</span><input name="name" placeholder="z. B. Helfer-Rabatt"></label>
       <label class="feld" style="width:100px"><span>Max. Nutzungen</span><input name="max" type="number" min="1" value="1"></label>
       <button class="knopf primaer">Anlegen</button></form>
     <div class="tabelle-wrap"><table><thead><tr><th>Code</th><th>Wert</th><th>Bezeichnung</th><th class="zahl">Eingelöst</th><th>Von</th><th></th></tr></thead><tbody>
     ${gs.map((g) => `<tr><td class="mono gold">${esc(g.code)}</td><td>${g.typ === "prozent" ? g.wert + " %" : euro(g.wert)}</td><td>${esc(g.name)}</td><td class="zahl">${g.eingeloest} / ${g.max}</td><td class="klein">${esc(g.nutzer)}</td>
-      <td>${g.eingeloest ? "" : `<button class="knopf klein geist" data-loeschen="${g.id}"></button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leise">Noch keine Gutscheine.</td></tr>`}
+      <td>${g.eingeloest ? "" : `<button class="knopf klein geist" data-loeschen="${g.id}">Löschen</button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leise">Noch keine Gutscheine.</td></tr>`}
     </tbody></table></div>`;
   const f = $("[data-neu]", box);
+  // Betrag in Euro mit Cent, Prozent ganzzahlig 1–100
+  f.typ.onchange = () => {
+    const betrag = f.typ.value === "betrag";
+    f.wert.step = betrag ? "0.01" : "1";
+    f.wert.min = betrag ? "0.01" : "1";
+    if (betrag) f.wert.removeAttribute("max"); else f.wert.max = "100";
+  };
   f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
     const v = formDaten(f);
     await api("adminGutscheinSpeichern", { lanId, gutschein: { code: v.code, typ: v.typ, wert: v.typ === "betrag" ? Math.round(Number(v.wert) * 100) : Number(v.wert), name: v.name, max: Number(v.max) } });
@@ -341,9 +363,9 @@ async function news(box) {
   const d = await api("oeffentlich");
   box.innerHTML = kopf("Neuigkeiten", `<button class="knopf primaer klein" data-neu>+ Neue Meldung</button>`) +
     `<div class="stapel">${d.news.map((n) => `<div class="karte zeile zwischen"><div><div class="klein gold">${esc(datum(n.datum))}</div><b>${esc(n.titel)}</b><div class="klein leise">${esc(n.teaser)}</div></div>
-      <div class="zeile"><button class="knopf klein" data-bearbeiten="${n.id}">Bearbeiten</button><button class="knopf klein geist" data-loeschen="${n.id}"></button></div></div>`).join("") || `<div class="leer">Noch keine News.</div>`}</div>`;
+      <div class="zeile"><button class="knopf klein" data-bearbeiten="${n.id}">Bearbeiten</button><button class="knopf klein geist" data-loeschen="${n.id}">Löschen</button></div></div>`).join("") || `<div class="leer">Noch keine News.</div>`}</div>`;
   const bearbeiten = async (id) => {
-    const n = id ? (await api("news", { id })).news : { titel: "", teaser: "", text: "", datum: new Date().toISOString().slice(0, 10) };
+    const n = id ? (await api("news", { id })).news : { titel: "", teaser: "", text: "", datum: berlinIso(Date.now()) };
     const m = modal(id ? "Meldung bearbeiten" : "Neue Meldung", `<form class="formular">
       <div class="zwei"><label class="feld"><span>Titel</span><input name="titel" value="${esc(n.titel)}" required></label><label class="feld"><span>Datum</span><input name="datum" type="date" value="${esc(n.datum)}"></label></div>
       <label class="feld"><span>Kurztext</span><input name="teaser" value="${esc(n.teaser)}"></label>
@@ -355,10 +377,10 @@ async function news(box) {
     }); };
   };
   $("[data-neu]", box).onclick = () => bearbeiten(null);
-  $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => bearbeiten(Number(b.dataset.bearbeiten))));
+  $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => mitSperre(b, () => bearbeiten(Number(b.dataset.bearbeiten)))));
   $$("[data-loeschen]", box).forEach((b) => (b.onclick = async () => {
     if (!(await bestaetigen("Meldung löschen?", { ja: "Löschen", gefahr: true }))) return;
-    await api("adminNewsLoeschen", { id: Number(b.dataset.loeschen) }); news(box);
+    mitSperre(b, async () => { await api("adminNewsLoeschen", { id: Number(b.dataset.loeschen) }); news(box); });
   }));
 }
 
@@ -381,7 +403,7 @@ async function lans(box) {
       <div class="fehler-text"></div><button class="knopf primaer">Speichern</button></form>`);
     const f = $("form", m.el);
     f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
-      try { const v = formDaten(f); await api("adminLanSpeichern", { lan: { ...v, id: l.id, gaesteLimit: Number(v.gaesteLimit) } }); m.schliessen(); toast("Gespeichert.", "ok"); render($("#app"), "lans"); } catch (err) { $(".fehler-text", f).textContent = err.message; }
+      try { const v = formDaten(f); await api("adminLanSpeichern", { lan: { ...v, id: l.id, gaesteLimit: Number(v.gaesteLimit) } }); m.schliessen(); toast("Gespeichert.", "ok"); const ansicht = box.closest(".ansicht"); if (ansicht) render(ansicht, "lans"); } catch (err) { $(".fehler-text", f).textContent = err.message; }
     }); };
   };
   $("[data-neu]", box).onclick = () => bearbeiten();
@@ -446,7 +468,7 @@ async function einstellungen(box) {
     mitSperre($("button", f), async () => {
       for (const [key, wert] of sammeln[f.dataset.key](formDaten(f))) await api("adminEinstellungSpeichern", { key, wert });
       toast("Gespeichert.", "ok");
-      neuLaden();
+      neuLaden().catch(fehler);
     });
   }));
 }
@@ -459,7 +481,7 @@ async function benutzer(box) {
     <div class="tabelle-wrap"><table><thead><tr><th>Nick</th><th>Name</th><th>E-Mail</th><th>Geburtstag</th><th>Ticket</th><th>Rolle</th><th title="Darf sich in der AgeLan-App in den Streamplan eintragen">Streamer</th><th></th></tr></thead><tbody id="b-liste"></tbody></table></div>`;
   const zeichnen = () => {
     const q = $("[data-q]", box).value.trim().toLowerCase();
-    $("#b-liste").innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
+    $("#b-liste", box).innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
       <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
       <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["orga", "Orga"], ["admin", "Veranstalter"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
@@ -474,15 +496,17 @@ async function benutzer(box) {
     $$("[data-pw]", box).forEach((b) => (b.onclick = async () => {
       const u = bs.find((x) => x.id === Number(b.dataset.pw));
       if (!(await bestaetigen(`Neues Passwort für ${u.nick} erzeugen? Das alte gilt dann nicht mehr.`, { ja: "Erzeugen" }))) return;
-      const r = await api("adminBenutzerAendern", { userId: u.id, passwortZuruecksetzen: true });
-      modal("Neues Passwort", `<p>Gib ${esc(u.nick)} dieses Passwort weiter. Es wird nur jetzt angezeigt.</p><p class="mono gold" style="font-size:1.5rem;letter-spacing:.1em">${esc(r.neuesPasswort)}</p>`);
+      mitSperre(b, async () => {
+        const r = await api("adminBenutzerAendern", { userId: u.id, passwortZuruecksetzen: true });
+        modal("Neues Passwort", `<p>Gib ${esc(u.nick)} dieses Passwort weiter. Es wird nur jetzt angezeigt.</p><p class="mono gold" style="font-size:1.5rem;letter-spacing:.1em">${esc(r.neuesPasswort)}</p>`);
+      });
     }));
     $$("[data-sperren]", box).forEach((b) => (b.onclick = () => mitSperre(b, async () => {
       const u = bs.find((x) => x.id === Number(b.dataset.sperren));
       await api("adminBenutzerAendern", { userId: u.id, gesperrt: !u.gesperrt });
       u.gesperrt = !u.gesperrt; zeichnen();
     })));
-    $$("[data-ticket]", box).forEach((b) => (b.onclick = async () => {
+    $$("[data-ticket]", box).forEach((b) => (b.onclick = () => mitSperre(b, async () => {
       const u = bs.find((x) => x.id === Number(b.dataset.ticket));
       const { tickettypen: ts } = await api("adminTickettypen", { lanId });
       const m = modal("Ticket für " + u.nick, `<form class="formular">
@@ -499,7 +523,7 @@ async function benutzer(box) {
           m.schliessen(); toast("Ticket angelegt.", "ok"); benutzer(box);
         } catch (err) { $(".fehler-text", f).textContent = err.message; }
       }); };
-    }));
+    })));
   };
   $("[data-q]", box).oninput = zeichnen;
   zeichnen();

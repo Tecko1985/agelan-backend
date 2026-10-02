@@ -1,4 +1,4 @@
-import { API_URL } from "./config.js?v=6";
+import { API_URL } from "./config.js?v=7";
 
 const TOKEN_KEY = "agelan-token";
 const params = new URLSearchParams(location.search);
@@ -13,6 +13,13 @@ export function tokenSetzen(t) {
   try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) { /* privat */ }
 }
 
+// Anmeldung der eingebetteten AgeLan-App (Klon, Präfix "klon:") mit entfernen.
+export const APP_KONTO_KEY = "klon:agelan_konto";
+export const APP_TAB_KEY = "klon:agelan_tab";
+export function appAnmeldungEntfernen() {
+  try { localStorage.removeItem(APP_KONTO_KEY); localStorage.removeItem(APP_TAB_KEY); } catch (e) { /* privat */ }
+}
+
 export async function api(aktion, daten = {}) {
   const t = token();
   const req = new Request((istDemo ? "https://demo.invalid" : API_URL.replace(/\/$/, "")) + "/api", {
@@ -23,7 +30,7 @@ export async function api(aktion, daten = {}) {
   let res;
   try {
     if (istDemo) {
-      if (!demoWorker) demoWorker = (await import("./demo.js?v=6")).starten();
+      if (!demoWorker) demoWorker = (await import("./demo.js?v=7")).starten();
       res = await (await demoWorker).fetch(req);
     } else {
       res = await fetch(req);
@@ -33,7 +40,7 @@ export async function api(aktion, daten = {}) {
   }
   const j = await res.json().catch(() => ({ error: "Antwort nicht lesbar (" + res.status + ")" }));
   if (!res.ok) {
-    if (res.status === 401) tokenSetzen("");
+    if (res.status === 401) { tokenSetzen(""); appAnmeldungEntfernen(); }
     const e = new Error(j.error || "Fehler " + res.status);
     e.status = res.status;
     throw e;

@@ -1,8 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=6";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=6";
-import { planSvg, U } from "./plan.js?v=6";
+import { api } from "./api.js?v=7";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=7";
+import { planSvg, U } from "./plan.js?v=7";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=7";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -15,13 +16,41 @@ const WERKZEUGE = [
 const FARBEN = ["grau", "gold", "rot", "gruen", "blau"];
 const neueId = () => Math.random().toString(36).slice(2, 11);
 
+// Der gerade offene Editor (höchstens einer): für die Rückfrage bei ungespeicherten
+// Änderungen und zum Abbau der Listener an window/document.
+let offen = null;
+
+export async function verlassenErlaubt() {
+  if (!offen || !offen.st.geaendert || !offen.container.isConnected) return true;
+  return bestaetigen("Der Sitzplan hat ungespeicherte Änderungen. Trotzdem verlassen und die Änderungen verwerfen?", { ja: "Verwerfen", gefahr: true });
+}
+
+export function schliessen() {
+  if (offen) offen.abbau();
+}
+
 export async function editor(container, lanId) {
+  schliessen();
   const daten = await api("sitzplan", { lanId });
+  if (!container.isConnected) return;
+  schliessen();
   const st = {
     plan: { breite: daten.plan.breite, hoehe: daten.plan.hoehe, deko: (daten.plan.deko || []).map((d) => ({ ...d })) },
     sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick })),
     auswahl: new Set(), werkzeug: "auswahl", zoom: 1, verlauf: [], geaendert: false,
   };
+  const ac = new AbortController();
+  const ich = {
+    st, container,
+    abbau: () => {
+      ac.abort();
+      if (offen === ich) { offen = null; vorVerlassen(null); }
+    },
+  };
+  offen = ich;
+  vorVerlassen(verlassenErlaubt);
+  // Neu laden/Tab schließen mit ungespeicherten Änderungen: Browser fragt nach.
+  window.addEventListener("beforeunload", (e) => { if (st.geaendert) { e.preventDefault(); e.returnValue = ""; } }, { signal: ac.signal });
 
   container.innerHTML = `
     <div class="editor-leiste">
@@ -117,7 +146,7 @@ export async function editor(container, lanId) {
   };
 
   window.addEventListener("pointermove", (e) => {
-    if (!zug || !document.body.contains(buehne)) return;
+    if (!zug || !buehne.isConnected) return;
     const p = punkt(e);
     if (zug.art === "schieben") {
       const dx = Math.round((p.x - zug.p0.x) * 2) / 2, dy = Math.round((p.y - zug.p0.y) * 2) / 2;
@@ -131,10 +160,10 @@ export async function editor(container, lanId) {
       vorschau = rechteckSvg(zug.p0, zug.p1);
       zeichnen();
     }
-  });
+  }, { signal: ac.signal });
 
   window.addEventListener("pointerup", () => {
-    if (!zug || !document.body.contains(buehne)) { zug = null; return; }
+    if (!zug || !buehne.isConnected) { zug = null; return; }
     const z = zug; zug = null; vorschau = "";
     if (z.art === "band") {
       const x1 = Math.min(z.p0.x, z.p1.x), x2 = Math.max(z.p0.x, z.p1.x), y1 = Math.min(z.p0.y, z.p1.y), y2 = Math.max(z.p0.y, z.p1.y);
@@ -158,11 +187,11 @@ export async function editor(container, lanId) {
       const feld = $("#e-eigenschaften [name=text]", container);
       if (feld) { feld.focus(); feld.select(); }
     } else zeichnen();
-  });
+  }, { signal: ac.signal });
 
   // ---- Tastatur ----
   const taste = (e) => {
-    if (!document.body.contains(buehne)) { document.removeEventListener("keydown", taste); return; }
+    if (!buehne.isConnected) { ich.abbau(); return; }
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || document.querySelector(".modal-hg")) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); rueckgaengig(); return; }
     if (!st.auswahl.size) return;
@@ -176,7 +205,7 @@ export async function editor(container, lanId) {
       zeichnen();
     }
   };
-  document.addEventListener("keydown", taste);
+  document.addEventListener("keydown", taste, { signal: ac.signal });
 
   const rueckgaengig = () => {
     const alt = st.verlauf.pop();
@@ -354,7 +383,7 @@ export async function editor(container, lanId) {
     if (a === "undo") rueckgaengig();
     else if (a === "alle") { st.auswahl = new Set([...st.sitze.map((s) => s.id), ...st.plan.deko.map((d) => d.id)]); zeichnen(); }
     else if (a === "zoom-" || a === "zoom+") { st.zoom = Math.min(2.5, Math.max(0.4, st.zoom + (a === "zoom+" ? 0.2 : -0.2))); zeichnen(); }
-    else if (a === "verwerfen") { if (!st.geaendert || await bestaetigen("Alle ungespeicherten Änderungen verwerfen?", { ja: "Verwerfen", gefahr: true })) editor(container, lanId); }
+    else if (a === "verwerfen") { if (!st.geaendert || await bestaetigen("Alle ungespeicherten Änderungen verwerfen?", { ja: "Verwerfen", gefahr: true })) { ich.abbau(); editor(container, lanId); } }
     else if (a === "speichern") mitSperre(b, async () => {
       const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt }) => ({ id, label, x, y, gesperrt })) });
       st.geaendert = false;
@@ -363,5 +392,7 @@ export async function editor(container, lanId) {
     });
   }));
 
+  // Seitenwechsel: Listener abbauen (ist der Container schon weg, sofort).
+  beimVerlassen(ich.abbau, container);
   zeichnen();
 }

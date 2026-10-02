@@ -37,6 +37,13 @@ export function zeit(ms) {
   if (!ms) return "";
   return new Date(ms).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+// Datum in Berliner Zeit (Haltefristen enden um 23:59:59 Berliner Zeit).
+export function berlinIso(ms) {
+  return ms ? new Date(ms).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }) : "";
+}
+export function berlinDatum(ms) {
+  return ms ? new Date(ms).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", year: "numeric" }) : "";
+}
 export function newsDatum(iso) {
   const [j, m, t] = String(iso).split("-").map(Number);
   return { tag: String(t).padStart(2, "0"), monat: MONATE[m - 1], jahr: j };
@@ -52,14 +59,26 @@ export function toast(text, art = "") {
 }
 export const fehler = (e) => toast(e && e.message ? e.message : String(e), "fehler");
 
-export function modal(titel, inhaltHtml, { breit = false } = {}) {
+export function modal(titel, inhaltHtml, { breit = false, beimSchliessen = null } = {}) {
   const hg = el(`<div class="modal-hg"><div class="modal ${breit ? "breit" : ""}" role="dialog" aria-modal="true">
     <div class="modal-kopf"><h3>${esc(titel)}</h3><button class="x" aria-label="Schließen">×</button></div>
     <div class="modal-inhalt"></div></div></div>`);
   const inhalt = $(".modal-inhalt", hg);
   if (typeof inhaltHtml === "string") inhalt.innerHTML = inhaltHtml; else inhalt.appendChild(inhaltHtml);
-  const schliessen = () => { hg.remove(); document.removeEventListener("keydown", taste); };
-  const taste = (e) => { if (e.key === "Escape") schliessen(); };
+  let zu = false;
+  const schliessen = () => {
+    if (zu) return;
+    zu = true;
+    hg.remove();
+    document.removeEventListener("keydown", taste);
+    if (beimSchliessen) beimSchliessen();
+  };
+  // Escape schließt nur den obersten Dialog (z. B. die Rückfrage über einem Formular).
+  const taste = (e) => {
+    if (e.key !== "Escape") return;
+    const alle = $$(".modal-hg");
+    if (alle[alle.length - 1] === hg) schliessen();
+  };
   hg.addEventListener("mousedown", (e) => { if (e.target === hg) schliessen(); });
   $(".x", hg).onclick = schliessen;
   document.addEventListener("keydown", taste);
@@ -69,12 +88,13 @@ export function modal(titel, inhaltHtml, { breit = false } = {}) {
   return { el: inhalt, schliessen };
 }
 
+// Liefert true/false; X, Escape und Klick daneben zählen als „nein“.
 export function bestaetigen(text, { ja = "Ja", nein = "Abbrechen", gefahr = false } = {}) {
   return new Promise((ok) => {
     const m = modal("Bitte bestätigen", `<p>${esc(text)}</p><div class="zeile ende">
-      <button class="knopf geist" data-n>${esc(nein)}</button><button class="knopf ${gefahr ? "rot" : "primaer"}" data-j>${esc(ja)}</button></div>`);
-    $("[data-n]", m.el).onclick = () => { m.schliessen(); ok(false); };
-    $("[data-j]", m.el).onclick = () => { m.schliessen(); ok(true); };
+      <button class="knopf geist" data-n>${esc(nein)}</button><button class="knopf ${gefahr ? "rot" : "primaer"}" data-j>${esc(ja)}</button></div>`, { beimSchliessen: () => ok(false) });
+    $("[data-n]", m.el).onclick = () => m.schliessen();
+    $("[data-j]", m.el).onclick = () => { ok(true); m.schliessen(); };
   });
 }
 
@@ -103,6 +123,15 @@ export async function mitSperre(knopf, fn) {
 // im Check-in, der Gast mit der Handy-Kamera (→ Status, nach dem Check-in Internet-Zugang).
 export const AGELAN_APP = "https://tecko1985.github.io/agelan-klon/";
 
+// Links aus Einstellungen/Daten: nur http(s) und mailto, sonst "" (dann keinen Link rendern).
+export function sichereUrl(u) {
+  const s = String(u == null ? "" : u).trim();
+  if (!s) return "";
+  try {
+    return ["http:", "https:", "mailto:"].includes(new URL(s, location.href).protocol) ? s : "";
+  } catch (e) { return ""; }
+}
+
 export function ticketLink(code) {
   return location.origin + location.pathname + "#/t/" + code;
 }
@@ -113,7 +142,7 @@ export function zugangHtml(z) {
   return `<div class="karte glanz zugang"><span class="ueberzeile">Du bist eingecheckt</span><h2 style="margin:0 0 6px">Dein Internet-Zugang</h2>
     <p class="leise klein">${esc(z.hinweis)}</p>
     ${feld("WLAN", z.ssid, false)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
-    <div class="zeile" style="margin-top:12px">${z.portal ? `<a class="knopf primaer" href="${esc(z.portal)}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}
+    <div class="zeile" style="margin-top:12px">${sichereUrl(z.portal) ? `<a class="knopf primaer" href="${esc(sichereUrl(z.portal))}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}
       <a class="knopf" href="#/app/essen">AgeLan-App öffnen (Essen, Turniere)</a></div>
     <p class="klein leise" style="margin:8px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an.</p></div>`;
 }

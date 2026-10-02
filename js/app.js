@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo } from "./api.js?v=6";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten } from "./ui.js?v=6";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=7";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=7";
 
 export const zustand = { daten: null, ich: null };
 
@@ -19,9 +19,17 @@ export const istAdmin = () => !!zustand.ich && zustand.ich.nutzer.rolle === "adm
 
 export function abmelden() {
   tokenSetzen("");
+  appAnmeldungEntfernen();
   zustand.ich = null;
-  location.hash = "#/";
-  neuLaden().then(route);
+  gehe("#/");
+}
+
+// Zur Seite wechseln: Hash setzen (hashchange ruft route auf); nur wenn der Hash
+// schon stimmt, selbst neu zeichnen – sonst würde die Seite doppelt gerendert.
+export function gehe(ziel) {
+  const jetzt = "#" + (location.hash.replace(/^#/, "") || "/");
+  if (jetzt === ziel) route();
+  else location.hash = ziel;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +46,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=6")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=7")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -52,7 +60,7 @@ function rahmenZeichnen() {
 
   const so = s.socials || {};
   const socials = [["discord", "DC"], ["twitch", "TW"], ["youtube", "YT"], ["instagram", "IG"], ["facebook", "FB"]]
-    .filter(([k]) => so[k]).map(([k, kurz]) => `<a href="${esc(so[k])}" target="_blank" rel="noopener" title="${k}">${kurz}</a>`).join("");
+    .filter(([k]) => sichereUrl(so[k])).map(([k, kurz]) => `<a href="${esc(sichereUrl(so[k]))}" target="_blank" rel="noopener" title="${k}">${kurz}</a>`).join("");
   $("#fuss").innerHTML = `
     <div><img src="img/logo.webp" alt="AGE LAN" width="64" height="64" style="margin-bottom:8px">
       <div>${esc(s.slogan)}</div><div class="klein leiser" style="margin-top:6px">© ${new Date().getFullYear()} AGE-LAN · Private Veranstaltung</div></div>
@@ -72,31 +80,54 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=6")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=6")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=6")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=6")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=6")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=7")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=7")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=7")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=7")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=7")).render(m, p),
 };
 
-let aufraeumen = null;
-export function beimVerlassen(fn) { aufraeumen = fn; }
+// Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
+// der Seite: Gehört es nicht mehr zur aktuellen Ansicht (die Seite wurde schon
+// verlassen, während sie noch lud), wird sofort aufgeräumt.
+let aufraeumen = [];
+let ansicht = null;
+export function beimVerlassen(fn, el) {
+  if (el && !(ansicht && ansicht.contains(el))) { try { fn(); } catch (e) { /* egal */ } return; }
+  aufraeumen.push(fn);
+}
+// Rückfrage vor dem Verlassen (z. B. ungespeicherter Sitzplan): fn liefert true = darf gehen.
+let rueckfrage = null;
+export function vorVerlassen(fn) { rueckfrage = fn; }
 
-export async function route() {
+// Jeder Lauf rendert in einen eigenen Container. Startet ein neuer Lauf, bevor der
+// alte fertig ist, schreibt der alte nur noch in seinen abgehängten Container.
+let lauf = 0;
+export async function route(ev) {
   const [, name = "", param = ""] = (location.hash.replace(/^#/, "") || "/").split("/");
   const fn = SEITEN[name] || seiteStart;
   // Bereichswechsel innerhalb der eingebetteten App: nicht neu laden, nur umschalten.
   if (name === "app" && appUmschalten(param)) return;
-  if (aufraeumen) { try { aufraeumen(); } catch (e) { /* egal */ } aufraeumen = null; }
+  if (rueckfrage && typeof HashChangeEvent !== "undefined" && ev instanceof HashChangeEvent) {
+    const frage = rueckfrage;
+    if (!(await frage())) { history.replaceState(null, "", new URL(ev.oldURL).hash || "#/"); return; }
+  }
+  const meiner = ++lauf;
+  rueckfrage = null;
+  const alt = aufraeumen;
+  aufraeumen = [];
+  alt.forEach((f) => { try { f(); } catch (e) { /* egal */ } });
   $$("#nav a").forEach((a) => a.classList.toggle("aktiv", a.dataset.route === name));
   $("#nav").classList.remove("offen");
-  const main = $("#app");
-  main.innerHTML = `<div class="lade">Lädt …</div>`;
+  const seite = el(`<div class="ansicht"><div class="lade">Lädt …</div></div>`);
+  ansicht = seite;
+  $("#app").replaceChildren(seite);
   try {
-    await fn(main, decodeURIComponent(param));
+    await fn(seite, decodeURIComponent(param));
   } catch (e) {
-    main.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
+    seite.innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
   }
+  if (meiner !== lauf) return;
   if (!location.hash.includes("#/admin")) window.scrollTo(0, 0);
 }
 
@@ -131,7 +162,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=6");
+    const konto = await import("./konto.js?v=7");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -148,7 +179,7 @@ function countdownStarten(root, start) {
   };
   tick();
   const iv = setInterval(tick, 30000);
-  beimVerlassen(() => clearInterval(iv));
+  beimVerlassen(() => clearInterval(iv), root);
 }
 
 // Eingecheckt? Dann gehört die LAN-Zentrale ganz nach oben: Platz, Internet,
@@ -174,7 +205,7 @@ function lanZentraleHtml(ich) {
       <div class="lz-kacheln">${APP_KACHELN.map(([b, titel, text]) => `<a class="app-kachel" href="#/app/${b}"><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
       <div class="lz-netz"><h3>Internet</h3>
         ${feld("WLAN", z.ssid)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
-        ${z.portal ? `<a class="knopf klein primaer" href="${esc(z.portal)}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}</div>
+        ${sichereUrl(z.portal) ? `<a class="knopf klein primaer" href="${esc(sichereUrl(z.portal))}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}</div>
     </div></div></section>`;
 }
 
@@ -218,10 +249,10 @@ async function seiteStart(main) {
 
   ${e.sponsoren.length ? `<section class="abschnitt"><div class="wrap">
     <h2>Sponsoren</h2>
-    <div class="sponsoren">${e.sponsoren.map((s) => `<a class="sponsor" ${s.url ? `href="${esc(s.url)}" target="_blank" rel="noopener"` : ""}>${s.logo ? `<img src="${esc(s.logo)}" alt="">` : ""}${esc(s.name)}</a>`).join("")}</div>
+    <div class="sponsoren">${e.sponsoren.map((s) => `<a class="sponsor" ${sichereUrl(s.url) ? `href="${esc(sichereUrl(s.url))}" target="_blank" rel="noopener"` : ""}>${s.logo ? `<img src="${esc(s.logo)}" alt="">` : ""}${esc(s.name)}</a>`).join("")}</div>
   </div></section>` : ""}
 
-  ${e.seite.socials && e.seite.socials.discord ? `<section class="abschnitt"><div class="wrap"><p class="discord-zeile">Fragen, Mitfahrgelegenheit, Teams? Das läuft alles auf unserem <a href="${esc(e.seite.socials.discord)}" target="_blank" rel="noopener">Discord</a>.</p></div></section>` : ""}`;
+  ${e.seite.socials && sichereUrl(e.seite.socials.discord) ? `<section class="abschnitt"><div class="wrap"><p class="discord-zeile">Fragen, Mitfahrgelegenheit, Teams? Das läuft alles auf unserem <a href="${esc(sichereUrl(e.seite.socials.discord))}" target="_blank" rel="noopener">Discord</a>.</p></div></section>` : ""}`;
   ticketKnoepfeVerdrahten(main);
   kopierenVerdrahten(main);
   if (lan.start) countdownStarten(main, lan.start);
@@ -343,13 +374,13 @@ async function seiteGaeste(main) {
     <div class="zeile" style="margin:18px 0"><input id="g-suche" placeholder="Suchen nach Nick, Gruppe oder Platz …" style="max-width:360px"></div>
     <div class="tabelle-wrap"><table><thead><tr><th>#</th><th>Nickname</th><th>Gruppe</th><th>Ticket</th><th>Platz</th></tr></thead><tbody id="g-liste"></tbody></table></div></div>`;
   const zeichnen = () => {
-    const q = $("#g-suche").value.trim().toLowerCase();
+    const q = $("#g-suche", main).value.trim().toLowerCase();
     const liste = d.gaeste.filter((g) => !q || [g.nick, g.gruppe, g.sitz].join(" ").toLowerCase().includes(q));
-    $("#g-liste").innerHTML = liste.map((g, i) => `<tr><td class="leise">${i + 1}</td><td><b>${esc(g.nick)}</b></td><td>${g.gruppe ? `<span class="abzeichen blau">${esc(g.gruppe)}</span>` : ""}</td>
+    $("#g-liste", main).innerHTML = liste.map((g, i) => `<tr><td class="leise">${i + 1}</td><td><b>${esc(g.nick)}</b></td><td>${g.gruppe ? `<span class="abzeichen blau">${esc(g.gruppe)}</span>` : ""}</td>
       <td class="leise">${esc(g.typ)}</td><td>${g.sitz ? `<a href="#/sitzplan/${encodeURIComponent(g.sitz)}" class="abzeichen gold">${esc(g.sitz)}</a>` : `<span class="leise">–</span>`}</td></tr>`).join("")
       || `<tr><td colspan="5" class="leise">Niemand gefunden.</td></tr>`;
   };
-  $("#g-suche").oninput = zeichnen;
+  $("#g-suche", main).oninput = zeichnen;
   zeichnen();
 }
 
@@ -358,8 +389,9 @@ async function seiteGaeste(main) {
 // ---------------------------------------------------------------------------
 // Die App (agelan-klon) liegt unter derselben Herkunft (tecko1985.github.io).
 // Die Website holt beim Backend ein App-Token und legt es dort ab, wo die App
-// ihre Anmeldung sucht (localStorage "agelan_konto") – dann startet sie im
-// iframe ohne zweite Anmeldung.
+// ihre Anmeldung sucht (localStorage "klon:agelan_konto" – mit Präfix, damit es
+// nicht mit der Live-App unter derselben Herkunft kollidiert) – dann startet sie
+// im iframe ohne zweite Anmeldung.
 const BEREICHE = [["essen", "Essen"], ["fruehstueck", "Frühstück"], ["turnier", "Turniere"], ["stream", "Stream"], ["downloads", "Downloads"]];
 
 function appUmschalten(bereich) {
@@ -389,8 +421,8 @@ async function seiteApp(main, bereich) {
     return;
   }
   try {
-    localStorage.setItem("agelan_konto", JSON.stringify(konto));
-    localStorage.setItem("agelan_tab", bereich);
+    localStorage.setItem(APP_KONTO_KEY, JSON.stringify(konto));
+    localStorage.setItem(APP_TAB_KEY, bereich);
   } catch (e) { /* privater Modus: dann fragt die App selbst nach der Anmeldung */ }
   // Dieselben Kacheln wie in der LAN-Zentrale der Startseite – sie sind hier die
   // Navigation; die Reiterleiste der App ist eingebettet ausgeblendet.

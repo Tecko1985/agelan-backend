@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=6";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=6";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=6";
-import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=6";
+import { api } from "./api.js?v=7";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=7";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=7";
+import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=7";
 
 export async function render(main, param) {
   await neuLaden();
@@ -9,7 +9,9 @@ export async function render(main, param) {
   const gruppenModus = param === "~gruppe" && ich && ich.gruppe && ich.gruppe.istLeitung;
   const markiert = param && param !== "~gruppe" ? param : "";
   let daten = await api("sitzplan");
-  let zoom = Number(sessionStorage.getItem("plan-zoom")) || 1;
+  let gemerkt = null;
+  try { gemerkt = sessionStorage.getItem("plan-zoom"); } catch (e) { /* privater Modus */ }
+  let zoom = Number(gemerkt) || 1;
   const auswahl = new Set(gruppenModus ? ich.gruppe.sitze.map((s) => s.id) : []);
   const maxSitze = zustand.daten.einstellungen.gruppeMaxSitze;
 
@@ -28,13 +30,13 @@ export async function render(main, param) {
       <aside class="stapel" id="seite"></aside>
     </div></div>`;
 
-  const buehne = $("#buehne");
-  if (!sessionStorage.getItem("plan-zoom")) {
+  const buehne = $("#buehne", main);
+  if (!gemerkt) {
     // Ohne gemerkten Zoom: Plan auf die Breite der Bühne einpassen
     zoom = Math.min(1.4, Math.max(0.6, (buehne.clientWidth - 30) / (daten.plan.breite * U + 12)));
   }
   const zeichnen = () => {
-    const q = $("#p-suche").value.trim().toLowerCase();
+    const q = $("#p-suche", main).value.trim().toLowerCase();
     buehne.innerHTML = planSvg(daten.plan, daten.sitze, {
       zoom,
       klassen: (s, istDeko) => {
@@ -47,7 +49,7 @@ export async function render(main, param) {
     });
     seiteZeichnen();
     const zahl = (st) => daten.sitze.filter((s) => s.status === st).length;
-    $("#p-stand").textContent = `${zahl("frei")} frei · ${zahl("reserviert")} reserviert · ${zahl("belegt")} belegt`;
+    $("#p-stand", main).textContent = `${zahl("frei")} frei · ${zahl("reserviert")} reserviert · ${zahl("belegt")} belegt`;
   };
 
   const seiteZeichnen = () => {
@@ -63,10 +65,10 @@ export async function render(main, param) {
     else meinTeil = `<div class="karte glanz"><h3>Dein Platz</h3>${t.sitz ? `<div class="gross-sitz">${esc(t.sitz)}</div><p class="leise klein">Klicke einen anderen freien Platz an, um zu wechseln.</p>
       ${t.checkinAt ? "" : `<button class="knopf klein geist" data-freigeben>Platz freigeben</button>`}` : `<p>Du hast noch keinen Platz. Klicke einen <b class="gruen">grünen</b> Platz an.</p>`}
       ${ich.gruppe ? `<p class="klein leise" style="margin-top:10px">Gruppe <b>${esc(ich.gruppe.name)}</b>: lila umrandete Plätze sind für euch.${ich.gruppe.istLeitung ? ` <a href="#/sitzplan/~gruppe">Plätze vormerken</a>` : ""}</p>` : ""}</div>`;
-    $("#seite").innerHTML = meinTeil + `<div class="karte"><h3>Legende</h3>${legendeHtml()}</div>`;
-    const fr = $("[data-freigeben]");
+    $("#seite", main).innerHTML = meinTeil + `<div class="karte"><h3>Legende</h3>${legendeHtml()}</div>`;
+    const fr = $("[data-freigeben]", main);
     if (fr) fr.onclick = () => mitSperre(fr, async () => { await api("sitzFreigeben"); await neuLaden(); ich = zustand.ich; daten = await api("sitzplan"); zeichnen(); toast("Platz freigegeben."); });
-    const gs = $("[data-gruppe-speichern]");
+    const gs = $("[data-gruppe-speichern]", main);
     if (gs) gs.onclick = () => mitSperre(gs, async () => {
       await api("gruppeSitze", { sitzIds: [...auswahl] });
       await neuLaden(); ich = zustand.ich; daten = await api("sitzplan"); zeichnen(); toast("Vormerkung gespeichert.", "ok");
@@ -97,12 +99,15 @@ export async function render(main, param) {
     if (!(await bestaetigen(t.sitz ? `Von ${t.sitz} auf Platz ${s.label} wechseln?` : `Platz ${s.label} nehmen?`, { ja: "Ja, Platz nehmen" }))) return;
     try {
       await api("sitzWaehlen", { sitzId: s.id });
-      toast("Platz " + s.label + " gehört dir! ", "ok");
+      toast("Platz " + s.label + " gehört dir.", "ok");
       await neuLaden();
       ich = zustand.ich;
       daten = await api("sitzplan");
       zeichnen();
-    } catch (err) { fehler(err); daten = await api("sitzplan"); zeichnen(); }
+    } catch (err) {
+      fehler(err);
+      try { daten = await api("sitzplan"); zeichnen(); } catch (e) { /* nächster Versuch beim Live-Abgleich */ }
+    }
   });
 
   $$("[data-zoom]", main).forEach((b) => (b.onclick = () => {
@@ -110,7 +115,7 @@ export async function render(main, param) {
     try { sessionStorage.setItem("plan-zoom", zoom); } catch (e) { /* egal */ }
     zeichnen();
   }));
-  $("#p-suche").oninput = zeichnen;
+  $("#p-suche", main).oninput = zeichnen;
   tooltipAnbinden(buehne, (id) => daten.sitze.find((s) => s.id === id));
   zeichnen();
   const ziel = $(".markiert", buehne);
@@ -121,6 +126,6 @@ export async function render(main, param) {
     const iv = setInterval(async () => {
       try { daten = await api("sitzplan"); zeichnen(); } catch (e) { /* nächster Versuch */ }
     }, 20000);
-    beimVerlassen(() => clearInterval(iv));
+    beimVerlassen(() => clearInterval(iv), main);
   }
 }

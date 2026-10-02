@@ -366,6 +366,14 @@ function bremseFehlschlag(ip) {
   if (!e || e.bis < Date.now()) fehlversuche.set(ip, { anzahl: 1, bis: Date.now() + 15 * 60e3 });
   else e.anzahl++;
 }
+// Gegen Massen-Registrierungen: je IP höchstens 5 neue Konten pro Stunde.
+const anmeldungen = new Map();
+function registrierungZaehlen(ip) {
+  const e = anmeldungen.get(ip);
+  if (!e || e.bis < Date.now()) { anmeldungen.set(ip, { anzahl: 1, bis: Date.now() + 60 * 60e3 }); return; }
+  if (e.anzahl >= 5) throw new F(429, "Zu viele neue Konten von diesem Anschluss. Bitte später nochmal.");
+  e.anzahl++;
+}
 
 // ---------------------------------------------------------------------------
 // Prüfer
@@ -405,6 +413,22 @@ function ganz(v, feld, min, max) {
 }
 function heute() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+// "JJJJ-MM-TT" + "hh:mm:ss" als Berliner Ortszeit -> Millisekunden (Sommer-/Winterzeit beachtet).
+function berlinMs(datum, zeit) {
+  const utc = Date.parse(datum + "T" + zeit + "Z");
+  const t = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(utc)).map((p) => [p.type, p.value]));
+  const versatz = Date.parse(`${t.year}-${t.month}-${t.day}T${t.hour}:${t.minute}:${t.second}Z`) - utc;
+  return utc - versatz;
+}
+function sichereUrl(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "";
+  // Relative Logo-Pfade wie "img/x.png" erlauben, sonst nur http(s) und mailto.
+  if (/^(https?:|mailto:)/i.test(s) || /^[\w./-]+$/.test(s) && !s.includes(":")) return s;
+  return "";
 }
 function alterAm(geburtsdatum, stichtag) {
   if (!geburtsdatum) return null;
@@ -609,6 +633,7 @@ const AKTIONEN = {
     if (!u.geburtsdatum) throw new F(400, "Geburtsdatum fehlt (wir brauchen es wegen der Altersgrenze).");
     if (await eins(env, "SELECT id FROM users WHERE nick_key = ?", nick.toLowerCase())) throw new F(409, "Diesen Nickname gibt es schon.");
     if (await eins(env, "SELECT id FROM users WHERE email_key = ?", email.toLowerCase())) throw new F(409, "Mit dieser E-Mail gibt es schon ein Konto.");
+    registrierungZaehlen(c.ip);
     const r = await los(env, `INSERT INTO users (nick, nick_key, email, email_key, vorname, nachname, geburtsdatum, discord, pw, created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`, nick, nick.toLowerCase(), email, email.toLowerCase(), u.vorname, u.nachname, u.geburtsdatum, u.discord, await passwortHashen(pw), Date.now());
     const neu = await eins(env, "SELECT * FROM users WHERE id = ?", r.meta.last_row_id);
@@ -648,14 +673,21 @@ const AKTIONEN = {
     const { env, body } = c;
     const u = brauchtLogin(c);
     const email = mailPruefen(body.email);
+    const vorname = text(body.vorname, 60, "Vorname", true), nachname = text(body.nachname, 60, "Nachname", true);
+    const geburtsdatum = datumPruefen(body.geburtsdatum, "Geburtsdatum");
+    if (!geburtsdatum) throw new F(400, "Geburtsdatum fehlt (wir brauchen es wegen der Altersgrenze).");
+    const discord = text(body.discord, 60, "Discord", false);
     if (email.toLowerCase() !== u.email_key && await eins(env, "SELECT id FROM users WHERE email_key = ?", email.toLowerCase())) throw new F(409, "Mit dieser E-Mail gibt es schon ein Konto.");
+    // Erst alles prüfen, dann schreiben – sonst bleibt bei falschem Passwort die Hälfte gespeichert.
+    if (body.passwortNeu) {
+      if (!bremseOffen(c.ip)) throw new F(429, "Zu viele Fehlversuche. Bitte in 15 Minuten nochmal.");
+      if (!(await passwortStimmt(String(body.passwortAlt || ""), u.pw))) { bremseFehlschlag(c.ip); throw new F(403, "Das bisherige Passwort stimmt nicht."); }
+      if (String(body.passwortNeu).length < PW_MIN) throw new F(400, "Das neue Passwort braucht mindestens " + PW_MIN + " Zeichen.");
+    }
     await los(env, "UPDATE users SET email = ?, email_key = ?, vorname = ?, nachname = ?, geburtsdatum = ?, discord = ? WHERE id = ?",
-      email, email.toLowerCase(), text(body.vorname, 60, "Vorname", true), text(body.nachname, 60, "Nachname", true),
-      datumPruefen(body.geburtsdatum, "Geburtsdatum"), text(body.discord, 60, "Discord", false), u.id);
+      email, email.toLowerCase(), vorname, nachname, geburtsdatum, discord, u.id);
     let token = null;
     if (body.passwortNeu) {
-      if (!(await passwortStimmt(String(body.passwortAlt || ""), u.pw))) throw new F(403, "Das bisherige Passwort stimmt nicht.");
-      if (String(body.passwortNeu).length < PW_MIN) throw new F(400, "Das neue Passwort braucht mindestens " + PW_MIN + " Zeichen.");
       await los(env, "UPDATE users SET pw = ?, token_ver = token_ver + 1 WHERE id = ?", await passwortHashen(String(body.passwortNeu)), u.id);
       token = await tokenBauen(env, await eins(env, "SELECT * FROM users WHERE id = ?", u.id));
     }
@@ -688,7 +720,8 @@ const AKTIONEN = {
     await los(env, "INSERT OR IGNORE INTO settings (key, value) VALUES ('klon:tokenSecret', ?)", b64(zufallsBytes(32)));
     const roh = (await eins(env, "SELECT value FROM settings WHERE key = 'klon:tokenSecret'")).value;
     const key = await crypto.subtle.importKey("raw", unb64(roh), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const nutzlast = { n: u.nick, e: Date.now() + 120 * 864e5, t: Number(u.created_at) || 0 };
+    // v = token_ver: Passwortwechsel oder -reset macht auch das App-Token ungültig.
+    const nutzlast = { n: u.nick, e: Date.now() + 120 * 864e5, t: Number(u.created_at) || 0, v: u.token_ver };
     if (admin) nutzlast.a = 1;
     if (streamer) nutzlast.s = 1;
     if (orga) nutzlast.o = 1;
@@ -802,7 +835,13 @@ const AKTIONEN = {
     const r = await los(env, "INSERT INTO groups (lan_id, name, name_key, owner_id, code, ablauf, created_at) VALUES (?,?,?,?,?,?,?)",
       lan.id, name, name.toLowerCase(), u.id, zufallsCode(6), jetzt + e.gruppeHalteTage * 864e5, jetzt);
     const gid = r.meta.last_row_id;
-    await los(env, "INSERT INTO group_members (group_id, user_id, lan_id, created_at) VALUES (?,?,?,?)", gid, u.id, lan.id, jetzt);
+    try {
+      await los(env, "INSERT INTO group_members (group_id, user_id, lan_id, created_at) VALUES (?,?,?,?)", gid, u.id, lan.id, jetzt);
+    } catch (e) {
+      // Doppelklick: zweite Gruppe ohne Mitglied wieder wegräumen.
+      await los(env, "DELETE FROM groups WHERE id = ?", gid);
+      throw e;
+    }
     await protokoll(c, "gruppe-erstellt", name);
     return { gruppe: await gruppeDetail(env, gid, u.id) };
   },
@@ -951,9 +990,17 @@ const AKTIONEN = {
 
   async adminTicketAendern(c) {
     const { env, body } = c;
-    brauchtAdmin(c);
+    // Orga darf Notiz und Zahlart ändern, alles andere nur Veranstalter.
+    const ich = brauchtOrga(c);
+    const nurOrgaFelder = ["typId", "preisCent", "sitzId", "status", "otpNeu"].every((k) => body[k] === undefined);
+    if (ich.rolle !== "admin" && !nurOrgaFelder) throw new F(403, "Nur für Veranstalter.");
     const t = await eins(env, "SELECT * FROM tickets WHERE id = ?", Number(body.ticketId));
     if (!t) throw new F(404, "Ticket nicht gefunden.");
+    if (body.zahlart !== undefined) {
+      if (!ZAHLARTEN[body.zahlart]) throw new F(400, "Unbekannte Zahlart.");
+      await los(env, "UPDATE tickets SET zahlart = ? WHERE id = ?", body.zahlart, t.id);
+    }
+    if (t.status === "storniert" && (body.sitzId || body.typId != null)) throw new F(409, "Das Ticket ist storniert.");
     if (body.status === "storniert") {
       await los(env, "UPDATE tickets SET status = 'storniert', seat_id = NULL WHERE id = ?", t.id);
     }
@@ -964,7 +1011,7 @@ const AKTIONEN = {
     }
     if (body.preisCent != null) await los(env, "UPDATE tickets SET preis_cent = ? WHERE id = ?", ganz(body.preisCent, "Preis", 0, 1e6), t.id);
     if (body.orgaNotiz != null) await los(env, "UPDATE tickets SET orga_notiz = ? WHERE id = ?", text(body.orgaNotiz, 500, "Notiz", false), t.id);
-    if (body.sitzId !== undefined) {
+    if (body.sitzId !== undefined && body.status !== "storniert") {
       if (!body.sitzId) await los(env, "UPDATE tickets SET seat_id = NULL WHERE id = ?", t.id);
       else await sitzSetzen(env, t.id, t.user_id, t.lan_id, String(body.sitzId), true);
     }
@@ -981,6 +1028,7 @@ const AKTIONEN = {
     if (!u) throw new F(404, "Konto nicht gefunden.");
     const typ = await eins(env, "SELECT * FROM ticket_types WHERE id = ? AND lan_id = ?", Number(body.typId), lan.id);
     if (!typ) throw new F(404, "Ticketsorte nicht gefunden.");
+    if (await eins(env, "SELECT 1 FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id)) throw new F(409, u.nick + " hat für diese LAN schon ein Ticket.");
     const zahlart = ZAHLARTEN[body.zahlart] ? body.zahlart : "bar";
     const preis = body.preisCent != null ? ganz(body.preisCent, "Preis", 0, 1e6) : typ.preis_cent;
     const bezahlt = !!body.bezahlt || preis === 0;
@@ -1017,7 +1065,7 @@ const AKTIONEN = {
       return { ok: true };
     }
     if (body.ablauf) {
-      const ms = Date.parse(datumPruefen(body.ablauf, "Ablauf") + "T23:59:59");
+      const ms = berlinMs(datumPruefen(body.ablauf, "Ablauf"), "23:59:59");
       await los(env, "UPDATE groups SET ablauf = ? WHERE id = ?", ms, g.id);
     }
     if (body.name) await los(env, "UPDATE groups SET name = ?, name_key = ? WHERE id = ?", text(body.name, 30, "Name", true), String(body.name).trim().toLowerCase(), g.id);
@@ -1210,7 +1258,19 @@ const AKTIONEN = {
     brauchtAdmin(c);
     const key = String(c.body.key || "");
     if (!(key in STANDARD)) throw new F(400, "Unbekannte Einstellung.");
-    const wert = JSON.stringify(c.body.wert);
+    let w = c.body.wert;
+    // Objekt-Einstellungen mit den Standardwerten auffüllen, damit kein Pflichtfeld (z. B. zahlung.arten) fehlt.
+    const std = STANDARD[key];
+    if (std && typeof std === "object" && !Array.isArray(std)) {
+      if (!w || typeof w !== "object" || Array.isArray(w)) throw new F(400, "Ungültiger Wert.");
+      w = { ...std, ...w };
+    }
+    // Links nur als http(s)/mailto speichern – kein javascript: o. Ä.
+    if (key === "seite") w.socials = Object.fromEntries(Object.entries(w.socials || {}).map(([k, v]) => [k, sichereUrl(v)]));
+    if (key === "zahlung") { w.paypalMe = sichereUrl(w.paypalMe); w.arten = { ...std.arten, ...(w.arten || {}) }; }
+    if (key === "netz") w.portal = sichereUrl(w.portal);
+    if (key === "sponsoren") w = (Array.isArray(w) ? w : []).map((s) => ({ ...s, url: sichereUrl(s && s.url), logo: sichereUrl(s && s.logo) }));
+    const wert = JSON.stringify(w);
     if (wert.length > 100000) throw new F(400, "Zu groß.");
     await los(c.env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", key, wert);
     await protokoll(c, "einstellung", key);

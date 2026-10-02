@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=6";
-import { zustand, neuLaden, abmelden, route } from "./app.js?v=6";
-import { esc, $, $$, euro, zeitraum, zeit, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten } from "./ui.js?v=6";
+import { api, tokenSetzen } from "./api.js?v=7";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=7";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=7";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -76,12 +76,12 @@ export async function kaufen(typId) {
   const typ = d.tickettypen.find((t) => t.id === typId);
   if (!typ) return;
   const za = d.einstellungen.zahlung;
-  const arten = [["paypal", "PayPal (Freunde & Familie)", ""], ["ueberweisung", "Überweisung", ""], ["bar", "Bar bei der Orga / Abendkasse", ""]].filter(([k]) => za.arten[k]);
+  const arten = [["paypal", "PayPal (Freunde & Familie)"], ["ueberweisung", "Überweisung"], ["bar", "Bar bei der Orga / Abendkasse"]].filter(([k]) => za.arten[k]);
   const m = modal("Ticket bestellen", `<form class="formular">
     <div class="karte" style="padding:16px"><div class="zeile zwischen"><div><b>${esc(typ.name)}</b><div class="klein leise">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</div></div>
       <b class="gold">${euro(typ.preisCent)}</b></div></div>
     ${typ.extras.length ? `<div><div class="klein leise" style="margin-bottom:6px">Extras</div><div class="wahl">${typ.extras.map((x) => `<label><input type="checkbox" name="extra" value="${esc(x.name)}"> <span style="flex:1">${esc(x.name)}</span><b>+${euro(x.preisCent)}</b></label>`).join("")}</div></div>` : ""}
-    <div><div class="klein leise" style="margin-bottom:6px">Zahlart</div><div class="wahl">${arten.map(([k, t, ico], i) => `<label><input type="radio" name="zahlart" value="${k}" ${i === 0 ? "checked" : ""}> <span>${ico}</span> <span>${t}</span></label>`).join("")}</div></div>
+    <div><div class="klein leise" style="margin-bottom:6px">Zahlart</div><div class="wahl">${arten.map(([k, t], i) => `<label><input type="radio" name="zahlart" value="${k}" ${i === 0 ? "checked" : ""}> <span>${t}</span></label>`).join("")}</div></div>
     <div class="zeile" style="align-items:end"><label class="feld" style="flex:1"><span>Gutschein-Code (optional)</span><input name="gutschein" autocomplete="off"></label><button type="button" class="knopf" data-pruefen>Prüfen</button></div>
     <label class="feld"><span>Hinweis an die Orga (optional)</span><textarea name="notiz" maxlength="300" placeholder="z. B. „Ich möchte neben … sitzen“" style="min-height:60px"></textarea></label>
     <label class="check"><input type="checkbox" name="agb"> <span>Ich akzeptiere die <a href="#/seite/agb" target="_blank">Teilnahmebedingungen</a>. Unter 18? Dann bringe ich den unterschriebenen Muttizettel mit.</span></label>
@@ -95,7 +95,7 @@ export async function kaufen(typId) {
     try {
       const p = await api("preisVorschau", daten());
       $("[data-summe]", form).innerHTML = (p.rabattCent ? `<span class="klein leise" style="text-decoration:line-through;margin-right:8px">${euro(p.summeCent)}</span>` : "") + euro(p.endCent);
-      $(".fehler-text", form).textContent = p.couponText ? "" : "";
+      $(".fehler-text", form).textContent = "";
       if (p.couponText) toast("Gutschein: " + p.couponText, "ok");
     } catch (e) { $(".fehler-text", form).textContent = e.message; }
   };
@@ -107,10 +107,8 @@ export async function kaufen(typId) {
       try {
         await api("ticketKaufen", { ...daten(), zahlart: (form.querySelector("[name=zahlart]:checked") || {}).value, agb: form.agb.checked, notiz: form.notiz.value });
         m.schliessen();
-        toast("Ticket bestellt! ", "ok");
-        location.hash = "#/konto";
-        await neuLaden();
-        route();
+        toast("Ticket bestellt.", "ok");
+        gehe("#/konto");
       } catch (err) { $(".fehler-text", form).textContent = err.message; }
     });
   };
@@ -154,7 +152,7 @@ export async function render(main) {
   if (!zustand.ich) {
     main.innerHTML = `<div class="wrap" style="max-width:560px"><div class="seitenkopf"><span class="ueberzeile">Mein Konto</span><h1>Willkommen</h1>
       <p>Mit deinem Konto kaufst du Tickets, wählst deinen Platz und gründest Reservierungsgruppen.</p></div><div class="karte glanz" id="anmelde-box"></div></div>`;
-    const box = $("#anmelde-box");
+    const box = $("#anmelde-box", main);
     box.innerHTML = anmeldeFormular("login");
     formularVerdrahten(box, () => route());
     return;
@@ -234,7 +232,7 @@ function zahlInfo(t, za, kurz) {
   if (t.zahlart === "paypal") {
     wie = `<dl class="daten-liste"><dt>PayPal an</dt><dd><b>${esc(za.paypal || "wird noch bekanntgegeben")}</b></dd><dt>Betrag</dt><dd><b>${euro(t.preisCent)}</b></dd>
       <dt>Verwendungszweck</dt><dd class="mono">${esc(t.nutzer.nick)} ${kurz}</dd></dl>
-      ${za.paypalMe ? `<a class="knopf klein" style="margin-top:10px" target="_blank" rel="noopener" href="${esc(za.paypalMe.replace(/\/$/, "") + "/" + (t.preisCent / 100).toFixed(2))}">Mit PayPal.me bezahlen</a>` : ""}`;
+      ${sichereUrl(za.paypalMe) ? `<a class="knopf klein" style="margin-top:10px" target="_blank" rel="noopener" href="${esc(sichereUrl(za.paypalMe).replace(/\/$/, "") + "/" + (t.preisCent / 100).toFixed(2))}">Mit PayPal.me bezahlen</a>` : ""}`;
   } else if (t.zahlart === "ueberweisung") {
     wie = `<dl class="daten-liste"><dt>Empfänger</dt><dd>${esc(za.kontoinhaber || "–")}</dd><dt>IBAN</dt><dd class="mono">${esc(za.iban || "wird noch bekanntgegeben")}</dd>
       ${za.bank ? `<dt>Bank</dt><dd>${esc(za.bank)}</dd>` : ""}<dt>Betrag</dt><dd><b>${euro(t.preisCent)}</b></dd><dt>Verwendungszweck</dt><dd class="mono">${esc(t.nutzer.nick)} ${kurz}</dd></dl>`;
@@ -282,11 +280,11 @@ function gruppeHtml(g) {
     <dl class="daten-liste"><dt>Code</dt><dd><b class="mono gold" style="font-size:1.15rem;letter-spacing:.15em">${esc(g.code)}</b> <button class="knopf klein geist" data-kopieren="${esc(g.code)}">Kopieren</button></dd>
       <dt>Leitung</dt><dd>${esc(g.leitung)}</dd>
       <dt>Vorgemerkt</dt><dd>${g.sitze.length ? g.sitze.map((s) => `<span class="abzeichen ${s.besetzt ? "rot" : "blau"}">${esc(s.label)}</span>`).join(" ") : `<span class="leise">noch keine Plätze</span>`}</dd>
-      <dt>Hält bis</dt><dd>${esc(zeit(g.ablauf))}</dd></dl>
+      <dt>Hält bis</dt><dd>${esc(berlinDatum(g.ablauf))}</dd></dl>
     <div style="margin-top:12px"><div class="klein leise" style="margin-bottom:6px">Mitglieder</div>
-      ${g.mitglieder.map((m) => `<div class="zeile zwischen" style="padding:6px 0;border-bottom:1px dashed var(--rand)"><span>${esc(m.nick)} ${m.id === g.leitungId ? "" : ""}</span>
+      ${g.mitglieder.map((m) => `<div class="zeile zwischen" style="padding:6px 0;border-bottom:1px dashed var(--rand)"><span>${esc(m.nick)}${m.id === g.leitungId ? ` <span class="klein leise">(Leitung)</span>` : ""}</span>
         <span class="zeile">${m.sitz ? `<span class="abzeichen gold">${esc(m.sitz)}</span>` : ""}${m.ticket ? "" : `<span class="abzeichen">kein Ticket</span>`}
-        ${g.istLeitung && m.id !== g.leitungId ? `<button class="knopf klein geist" data-rauswerfen="${m.id}" title="Aus der Gruppe nehmen"></button>` : ""}</span></div>`).join("")}</div>
+        ${g.istLeitung && m.id !== g.leitungId ? `<button class="knopf klein geist" data-rauswerfen="${m.id}" title="Aus der Gruppe nehmen">Entfernen</button>` : ""}</span></div>`).join("")}</div>
     <div class="zeile" style="margin-top:14px">
       ${g.istLeitung ? `<a class="knopf klein primaer" href="#/sitzplan/~gruppe">Plätze vormerken</a><button class="knopf klein" data-neuer-code>Neuer Code</button>` : ""}
       <button class="knopf klein geist" data-verlassen>Gruppe verlassen</button></div></div>`;
