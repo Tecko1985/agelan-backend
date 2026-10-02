@@ -1,6 +1,6 @@
 // Demo-Modus: der ECHTE Worker (backend/worker.js) läuft im Browser, mit einer
 // SQLite-Datenbank aus sql.js statt D1. Die Datenbank liegt im localStorage.
-import worker from "../backend/worker.js?v=14";
+import worker from "../backend/worker.js?v=15";
 
 const SQL_CDN = "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/";
 const SPEICHER = "agelan-demo-db-v1";
@@ -70,15 +70,14 @@ export function demoZuruecksetzen() {
   location.reload();
 }
 
-// extra: zusätzliche Worker-Einstellungen, nur für Tests (z. B. Wallet-Zertifikate).
-export async function starten(extra = {}) {
+export async function starten() {
   await skriptLaden(SQL_CDN + "sql-wasm.js");
   const SQL = await window.initSqlJs({ locateFile: (f) => SQL_CDN + f });
   let db;
   let gespeichert = null;
   try { gespeichert = localStorage.getItem(SPEICHER); } catch (e) { /* privat */ }
   db = gespeichert ? new SQL.Database(Uint8Array.from(atob(gespeichert), (c) => c.charCodeAt(0))) : new SQL.Database();
-  const env = { DB: d1(db), TOKEN_SECRET: "demo-geheimnis", ADMIN_SETUP: "demo", PORTAL_SECRET: "demo-portal", ORIGINS: "*", ...extra };
+  const env = { DB: d1(db), TOKEN_SECRET: "demo-geheimnis", ADMIN_SETUP: "demo", PORTAL_SECRET: "demo-portal", ORIGINS: "*" };
   const fetchen = async (req) => {
     const res = await worker.fetch(req, env, { waitUntil() {} });
     speichern(db);

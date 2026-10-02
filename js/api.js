@@ -1,4 +1,4 @@
-import { API_URL } from "./config.js?v=14";
+import { API_URL } from "./config.js?v=15";
 
 const TOKEN_KEY = "agelan-token";
 const params = new URLSearchParams(location.search);
@@ -20,11 +20,6 @@ export function appAnmeldungEntfernen() {
   try { localStorage.removeItem(APP_KONTO_KEY); localStorage.removeItem(APP_TAB_KEY); } catch (e) { /* privat */ }
 }
 
-// Wallet-Pass eines Tickets (Apple: .pkpass, Google: Weiterleitung). Im Demo-Modus gibt es keine.
-export function walletUrl(art, code) {
-  return istDemo ? "" : API_URL.replace(/\/$/, "") + "/wallet/" + art + "/" + code;
-}
-
 export async function api(aktion, daten = {}) {
   const t = token();
   const req = new Request((istDemo ? "https://demo.invalid" : API_URL.replace(/\/$/, "")) + "/api", {
@@ -35,7 +30,7 @@ export async function api(aktion, daten = {}) {
   let res;
   try {
     if (istDemo) {
-      if (!demoWorker) demoWorker = (await import("./demo.js?v=14")).starten();
+      if (!demoWorker) demoWorker = (await import("./demo.js?v=15")).starten();
       res = await (await demoWorker).fetch(req);
     } else {
       res = await fetch(req);
