@@ -1,7 +1,7 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=11";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=11";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=11";
+import { api, istDemo } from "./api.js?v=12";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=12";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=12";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -247,7 +247,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=11");
+    const { ticketHtml } = await import("./konto.js?v=12");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -362,7 +362,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=11");
+  planModul = await import("./planeditor.js?v=12");
   await planModul.editor($("#a-editor", box), lanId);
 }
 

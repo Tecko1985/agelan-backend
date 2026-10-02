@@ -1,12 +1,12 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=11";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=11";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=11";
+import { api } from "./api.js?v=12";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=12";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=12";
 
 // jsQR (1.4.0, UMD, setzt window.jsQR) liegt lokal neben diesem Modul.
-const JSQR = new URL("./jsqr.js?v=11", import.meta.url).href;
+const JSQR = new URL("./jsqr.js?v=12", import.meta.url).href;
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);
@@ -22,6 +22,44 @@ function kameraStoppen() {
   generation++;
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null;
+}
+
+// QR-Erkennung. BarcodeDetector (Android/Chrome) zuerst, sonst bzw. zusätzlich jsQR.
+// Manche Android-Geräte melden BarcodeDetector, erkennen damit aber nichts –
+// deshalb läuft jsQR immer als Rückfall mit. jsQR bekommt ein verkleinertes Bild:
+// abwechselnd den Mittelteil (der Rahmen) und das ganze Bild.
+export async function qrErkenner() {
+  let detector = null;
+  if ("BarcodeDetector" in window) {
+    try {
+      const formate = window.BarcodeDetector.getSupportedFormats ? await window.BarcodeDetector.getSupportedFormats() : ["qr_code"];
+      if (formate.includes("qr_code")) detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    } catch (e) { detector = null; }
+  }
+  if (!window.jsQR) { try { await skriptLaden(JSQR); } catch (e) { /* unten geprüft */ } }
+  if (!detector && !window.jsQR) throw new Error("QR-Erkennung konnte nicht geladen werden. Bitte über die Suche einchecken.");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let bild = 0;
+  const erkennen = async (quelle, breite, hoehe) => {
+    if (!breite || !hoehe) return "";
+    if (detector) {
+      try {
+        const codes = await detector.detect(quelle);
+        if (codes.length) return codes[0].rawValue;
+      } catch (e) { detector = null; } // kaputter Detector → nur noch jsQR
+    }
+    if (!window.jsQR) return "";
+    const ganz = bild++ % 2 === 1;
+    const seite = Math.min(breite, hoehe) * 0.8;
+    const [sx, sy, sw, sh] = ganz ? [0, 0, breite, hoehe] : [(breite - seite) / 2, (hoehe - seite) / 2, seite, seite];
+    const f = Math.min(1, (ganz ? 960 : 720) / Math.max(sw, sh));
+    canvas.width = Math.round(sw * f); canvas.height = Math.round(sh * f);
+    ctx.drawImage(quelle, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const r = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: ganz ? "attemptBoth" : "dontInvert" });
+    return r ? r.data : "";
+  };
+  return { erkennen, art: () => (detector ? "BarcodeDetector + jsQR" : "jsQR") };
 }
 
 function skriptLaden(src) {
@@ -42,6 +80,7 @@ export async function render(main, param) {
         <div class="scanner" id="c-scanner"><video playsinline muted></video><div class="rahmen"></div><div class="hinweis" id="c-hinweis">Kamera starten, um QR-Codes zu scannen</div></div>
         <div class="zeile"><button class="knopf primaer" id="c-kamera">Kamera starten</button>
           <form id="c-suche" class="zeile" style="flex:1"><input name="q" placeholder="Code, Nick, Name oder Platz …" style="flex:1;min-width:160px" autocomplete="off"><button class="knopf">Suchen</button></form></div>
+        <div class="klein leiser" id="c-technik"></div>
         <div class="karte"><h3>Zuletzt eingecheckt</h3><div id="c-zuletzt" class="leise klein">Noch niemand in dieser Sitzung.</div></div>
       </div>
       <div id="c-ergebnis"><div class="leer">Scanne ein Ticket oder suche nach einem Gast.</div></div>
@@ -145,45 +184,49 @@ export async function render(main, param) {
     try {
       let s;
       try {
-        s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      } catch (e) { throw new Error("Kamera nicht verfügbar: " + e.message); }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Der Browser erlaubt hier keinen Kamerazugriff (nur über https).");
+        try {
+          s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        } catch (e) {
+          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) throw e;
+          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); // ältere Geräte: ohne Wünsche
+        }
+      } catch (e) {
+        throw new Error(e && e.name === "NotAllowedError"
+          ? "Kamera-Zugriff wurde verweigert. Bitte in den Browser-Einstellungen für diese Seite erlauben."
+          : "Kamera nicht verfügbar: " + (e && e.message));
+      }
       if (veraltet()) { s.getTracks().forEach((t) => t.stop()); return; }
       stream = s;
+      // Dauer-Autofokus, wo das Gerät es kann (Android) – sonst bleibt der QR oft unscharf.
+      try {
+        const spur = s.getVideoTracks()[0];
+        const kann = spur.getCapabilities ? spur.getCapabilities() : {};
+        if (kann.focusMode && kann.focusMode.includes("continuous")) await spur.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+      } catch (e) { /* egal */ }
+      video.muted = true;
+      video.setAttribute("playsinline", "");
       video.srcObject = s;
       try { await video.play(); } catch (e) { throw new Error("Kamerabild lässt sich nicht abspielen: " + e.message); }
       if (veraltet()) return;
-      let detector = null;
-      if ("BarcodeDetector" in window) { try { detector = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { detector = null; } }
-      if (!detector && !window.jsQR) {
-        try { await skriptLaden(JSQR); } catch (e) { /* unten gemeldet */ }
-        if (veraltet()) return;
-        if (!window.jsQR) throw new Error("QR-Erkennung konnte nicht geladen werden. Bitte über die Suche einchecken.");
-      }
+      const erkenner = await qrErkenner();
+      if (veraltet()) return;
       laeuft = true;
       knopf.textContent = "Kamera stoppen";
       hinweis.textContent = "QR-Code in den Rahmen halten";
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      $("#c-technik", main).textContent = `${erkenner.art()} · ${video.videoWidth}×${video.videoHeight}`;
       const schleife = async () => {
         if (!laeuft || veraltet()) return;
         try {
           let text = "";
-          if (video.readyState >= 2) {
-            if (detector) {
-              const codes = await detector.detect(video);
-              if (codes.length) text = codes[0].rawValue;
-            } else {
-              canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-              ctx.drawImage(video, 0, 0);
-              const r = window.jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
-              if (r) text = r.data;
-            }
-          }
+          if (video.readyState >= 2) text = await erkenner.erkennen(video, video.videoWidth, video.videoHeight);
           // Derselbe Code wird nicht erneut gesucht, solange seine Karte sichtbar ist.
           if (text && text !== angezeigt && !veraltet()) {
             angezeigt = text;
             if (navigator.vibrate) navigator.vibrate(80);
             await suchen(text);
+            // Auf dem Handy steht das Ergebnis unter dem Kamerabild – hinscrollen.
+            if (matchMedia("(max-width: 900px)").matches) ergebnis.scrollIntoView({ behavior: "smooth", block: "start" });
           }
         } catch (e) { /* Bild verpasst – weiter */ }
         setTimeout(schleife, 180);
