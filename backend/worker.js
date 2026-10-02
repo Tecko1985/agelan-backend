@@ -1254,6 +1254,32 @@ const AKTIONEN = {
     return AKTIONEN.adminLans(c);
   },
 
+  // LAN löschen – nur wenn sie nicht aktiv ist und nie ein Ticket hatte
+  // (Tickets sind Zahlungsbelege und bleiben erhalten, auch stornierte).
+  async adminLanLoeschen(c) {
+    const { env, body } = c;
+    brauchtAdmin(c);
+    const lan = await eins(env, "SELECT * FROM lans WHERE id = ?", Number(body.lanId));
+    if (!lan) throw new F(404, "LAN nicht gefunden.");
+    if (lan.aktiv) throw new F(409, "Die aktive LAN kann nicht gelöscht werden. Erst eine andere LAN aktiv schalten.");
+    const t = await eins(env, "SELECT COUNT(*) AS n FROM tickets WHERE lan_id = ?", lan.id);
+    if (t.n) throw new F(409, `„${lan.name}“ hat ${t.n} Ticket${t.n === 1 ? "" : "s"} (auch stornierte zählen) und kann deshalb nicht gelöscht werden.`);
+    const anzahl = await eins(env, "SELECT COUNT(*) AS n FROM lans");
+    if (anzahl.n <= 1) throw new F(409, "Die letzte LAN kann nicht gelöscht werden.");
+    await env.DB.batch([
+      st(env, "DELETE FROM group_members WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM groups WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM seats WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM coupons WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM ticket_types WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM netz_logins WHERE lan_id = ?", lan.id),
+      st(env, "DELETE FROM settings WHERE key = ?", "plan:" + lan.id),
+      st(env, "DELETE FROM lans WHERE id = ?", lan.id),
+    ]);
+    await protokoll(c, "lan-geloescht", lan.name);
+    return AKTIONEN.adminLans(c);
+  },
+
   // ---------- Verwaltung: Sitzplätze sperren / für die Orga reservieren ----------
   // status: "frei" | "gesperrt" | "orga". Belegte Plätze bleiben belegt – nur ihr Merkmal ändert sich.
   async adminSitzStatus(c) {

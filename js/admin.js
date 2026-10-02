@@ -1,8 +1,8 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=18";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=18";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=18";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=18";
+import { api, istDemo } from "./api.js?v=19";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=19";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=19";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=19";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -251,7 +251,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=18");
+    const { ticketHtml } = await import("./konto.js?v=19");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -366,7 +366,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=18");
+  planModul = await import("./planeditor.js?v=19");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -477,7 +477,7 @@ async function lans(box) {
     <div class="tabelle-wrap"><table><thead><tr><th>Name</th><th>Zeitraum</th><th>Verkauf</th><th class="zahl">Limit</th><th class="zahl">Gäste</th><th></th></tr></thead><tbody>
     ${ls.map((l) => `<tr><td><b>${esc(l.name)}</b> ${l.aktiv ? `<span class="abzeichen gold">aktiv</span>` : ""}</td><td>${esc(zeitraum(l.start, l.ende))}</td><td>${l.verkaufOffen ? "offen" : "zu"}</td>
       <td class="zahl">${l.gaesteLimit}</td><td class="zahl">${l.zahlen.gaeste} (${l.zahlen.bezahlt} bez.)</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-sitze="${l.id}">Plätze sperren / Orga</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button></td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-sitze="${l.id}">Plätze sperren / Orga</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button>${l.aktiv ? "" : ` <button class="knopf klein rot" data-lloeschen="${l.id}" title="LAN löschen">Löschen</button>`}</td></tr>`).join("")}
     </tbody></table></div><p class="klein leise" style="margin-top:8px">Die aktive LAN ist die, die auf der Website erscheint. Eine neue LAN übernimmt die Ticketsorten der aktiven; den Sitzplan wählst du beim Anlegen (wie die aktive LAN, aus einer Vorlage oder leer).</p>
     <div class="karte" style="margin-top:18px"><h3>Sitzplan-Vorlagen</h3>
       <p class="klein leise" style="margin:0 0 10px">Eine Vorlage speichert Fläche, Beschriftungen und alle Plätze samt Sperren und Orga-Plätzen. Speichern: im LAN-Fenster unter „Sitzplan“.</p>
@@ -541,6 +541,16 @@ async function lans(box) {
   $("[data-neu]", box).onclick = () => bearbeiten();
   $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => bearbeiten(ls.find((l) => l.id === Number(b.dataset.bearbeiten)))));
   $$("[data-sitze]", box).forEach((b) => (b.onclick = () => sitzStatusBearbeiten(ls.find((l) => l.id === Number(b.dataset.sitze)))));
+  $$("[data-lloeschen]", box).forEach((b) => (b.onclick = async () => {
+    const l = ls.find((x) => x.id === Number(b.dataset.lloeschen));
+    if (!(await bestaetigen(`LAN „${l.name}“ endgültig löschen? Sitzplan, Ticketsorten, Gutscheine und Gruppen dieser LAN werden mit gelöscht.`, { ja: "Endgültig löschen", gefahr: true }))) return;
+    mitSperre(b, async () => {
+      await api("adminLanLoeschen", { lanId: l.id });
+      if (lanId === l.id) lanId = null;
+      toast("LAN „" + l.name + "“ gelöscht.", "ok");
+      neuZeichnen();
+    });
+  }));
   $$("[data-vloeschen]", box).forEach((b) => (b.onclick = async () => {
     const v = vorlagen.find((x) => x.id === Number(b.dataset.vloeschen));
     if (!(await bestaetigen(`Vorlage „${v.name}“ löschen? LANs, die sie benutzt haben, bleiben unverändert.`, { ja: "Löschen", gefahr: true }))) return;
