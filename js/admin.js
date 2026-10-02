@@ -1,8 +1,8 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=17";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=17";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=17";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=17";
+import { api, istDemo } from "./api.js?v=18";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=18";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=18";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=18";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -251,7 +251,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=17");
+    const { ticketHtml } = await import("./konto.js?v=18");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -366,7 +366,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=17");
+  planModul = await import("./planeditor.js?v=18");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -471,28 +471,146 @@ async function news(box) {
 
 // ---------------------------------------------------------------------------
 async function lans(box) {
-  const { lans: ls } = await api("adminLans");
+  const [{ lans: ls }, { vorlagen }] = await Promise.all([api("adminLans"), api("adminVorlagen")]);
+  const neuZeichnen = () => { const ansicht = box.closest(".ansicht"); if (ansicht) render(ansicht, "lans"); };
   box.innerHTML = kopf("LANs", `<button class="knopf primaer klein" data-neu>+ Neue LAN</button>`) + `
     <div class="tabelle-wrap"><table><thead><tr><th>Name</th><th>Zeitraum</th><th>Verkauf</th><th class="zahl">Limit</th><th class="zahl">Gäste</th><th></th></tr></thead><tbody>
     ${ls.map((l) => `<tr><td><b>${esc(l.name)}</b> ${l.aktiv ? `<span class="abzeichen gold">aktiv</span>` : ""}</td><td>${esc(zeitraum(l.start, l.ende))}</td><td>${l.verkaufOffen ? "offen" : "zu"}</td>
-      <td class="zahl">${l.gaesteLimit}</td><td class="zahl">${l.zahlen.gaeste} (${l.zahlen.bezahlt} bez.)</td><td><button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button></td></tr>`).join("")}
-    </tbody></table></div><p class="klein leise" style="margin-top:8px">Die aktive LAN ist die, die auf der Website erscheint. Eine neue LAN übernimmt Sitzplan und Ticketsorten der aktiven.</p>`;
+      <td class="zahl">${l.gaesteLimit}</td><td class="zahl">${l.zahlen.gaeste} (${l.zahlen.bezahlt} bez.)</td>
+      <td style="white-space:nowrap"><button class="knopf klein" data-sitze="${l.id}">Plätze sperren / Orga</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button></td></tr>`).join("")}
+    </tbody></table></div><p class="klein leise" style="margin-top:8px">Die aktive LAN ist die, die auf der Website erscheint. Eine neue LAN übernimmt die Ticketsorten der aktiven; den Sitzplan wählst du beim Anlegen (wie die aktive LAN, aus einer Vorlage oder leer).</p>
+    <div class="karte" style="margin-top:18px"><h3>Sitzplan-Vorlagen</h3>
+      <p class="klein leise" style="margin:0 0 10px">Eine Vorlage speichert Fläche, Beschriftungen und alle Plätze samt Sperren und Orga-Plätzen. Speichern: im LAN-Fenster unter „Sitzplan“.</p>
+      ${vorlagen.length ? `<div class="tabelle-wrap"><table><thead><tr><th>Name</th><th class="zahl">Plätze</th><th class="zahl">gesperrt</th><th class="zahl">Orga</th><th>Gespeichert</th><th></th></tr></thead><tbody>
+        ${vorlagen.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td class="zahl">${v.sitze}</td><td class="zahl">${v.gesperrt}</td><td class="zahl">${v.orga}</td><td class="klein leise">${esc(zeit(v.erstellt))}</td>
+          <td><button class="knopf klein rot" data-vloeschen="${v.id}">Vorlage löschen</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="leise klein">Noch keine Vorlagen.</div>`}</div>`;
+
+  const vorlagenOptionen = vorlagen.map((v) => `<option value="${v.id}">${esc(v.name)} (${v.sitze} Plätze)</option>`).join("");
   const bearbeiten = (l = { name: "", start: "", ende: "", gaesteLimit: 120, verkaufOffen: false, ort: "", adresse: "", beschreibung: "", aktiv: false }) => {
+    const aktiveLan = ls.find((x) => x.aktiv);
     const m = modal(l.id ? "LAN bearbeiten" : "Neue LAN", `<form class="formular">
       <label class="feld"><span>Name</span><input name="name" value="${esc(l.name)}" required></label>
       <div class="zwei"><label class="feld"><span>Start</span><input name="start" type="date" value="${esc(l.start)}"></label><label class="feld"><span>Ende</span><input name="ende" type="date" value="${esc(l.ende)}"></label></div>
       <div class="zwei"><label class="feld"><span>Ort</span><input name="ort" value="${esc(l.ort)}"></label><label class="feld"><span>Adresse</span><input name="adresse" value="${esc(l.adresse)}"></label></div>
       <label class="feld"><span>Gäste-Limit (PC-Plätze)</span><input name="gaesteLimit" type="number" min="0" value="${l.gaesteLimit}"></label>
       <label class="feld"><span>Beschreibung</span><textarea name="beschreibung">${esc(l.beschreibung)}</textarea></label>
+      ${l.id ? "" : `<label class="feld"><span>Sitzplan</span><select name="planVorlage">
+        <option value="aktiv">wie die aktive LAN${aktiveLan ? ` (${esc(aktiveLan.name)})` : ""}</option>
+        ${vorlagen.length ? `<optgroup label="Vorlagen">${vorlagenOptionen}</optgroup>` : ""}
+        <option value="leer">leerer Plan</option></select></label>`}
       <div class="zeile"><label class="check"><input type="checkbox" name="verkaufOffen" ${l.verkaufOffen ? "checked" : ""}> Ticketverkauf offen</label><label class="check"><input type="checkbox" name="aktiv" ${l.aktiv ? "checked" : ""}> Aktive LAN (auf der Website)</label></div>
-      <div class="fehler-text"></div><button class="knopf primaer">Speichern</button></form>`);
+      <div class="fehler-text"></div><button class="knopf primaer">Speichern</button></form>
+      ${l.id ? `<div class="karte" style="margin-top:18px"><h3>Sitzplan</h3>
+        <div class="zeile"><button type="button" class="knopf" data-l-sitze>Plätze sperren / für Orga reservieren</button><button type="button" class="knopf" data-l-editor>Im Sitzplan-Editor öffnen</button></div>
+        <div class="zeile" style="margin-top:12px;align-items:flex-end">
+          <label class="feld" style="flex:1;min-width:180px;margin:0"><span>Als Vorlage speichern</span><input data-v-name placeholder="Name, z. B. Nordhessenhalle 120"></label>
+          <button type="button" class="knopf" data-v-speichern>Speichern</button></div>
+        ${vorlagen.length ? `<div class="zeile" style="margin-top:12px;align-items:flex-end">
+          <label class="feld" style="flex:1;min-width:180px;margin:0"><span>Vorlage anwenden (ersetzt den Plan)</span><select data-v-wahl>${vorlagenOptionen}</select></label>
+          <button type="button" class="knopf" data-v-anwenden>Anwenden</button></div>` : ""}</div>` : ""}`);
     const f = $("form", m.el);
     f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
-      try { const v = formDaten(f); await api("adminLanSpeichern", { lan: { ...v, id: l.id, gaesteLimit: Number(v.gaesteLimit) } }); m.schliessen(); toast("Gespeichert.", "ok"); const ansicht = box.closest(".ansicht"); if (ansicht) render(ansicht, "lans"); } catch (err) { $(".fehler-text", f).textContent = err.message; }
+      try { const v = formDaten(f); await api("adminLanSpeichern", { lan: { ...v, id: l.id, gaesteLimit: Number(v.gaesteLimit) } }); m.schliessen(); toast("Gespeichert.", "ok"); neuZeichnen(); } catch (err) { $(".fehler-text", f).textContent = err.message; }
     }); };
+    if (!l.id) return;
+    $("[data-l-sitze]", m.el).onclick = () => sitzStatusBearbeiten(l);
+    $("[data-l-editor]", m.el).onclick = async () => {
+      if (!(await darfWechseln())) return;
+      m.schliessen(); lanId = l.id; reiter = "plan";
+      history.replaceState(null, "", "#/admin/plan");
+      const ansicht = box.closest(".ansicht"); if (ansicht) render(ansicht, "plan");
+    };
+    const vs = $("[data-v-speichern]", m.el);
+    vs.onclick = () => mitSperre(vs, async () => {
+      const name = $("[data-v-name]", m.el).value.trim();
+      if (!name) { toast("Bitte einen Namen für die Vorlage eingeben."); return; }
+      if (vorlagen.some((v) => v.name.toLowerCase() === name.toLowerCase())
+        && !(await bestaetigen(`Die Vorlage „${name}“ gibt es schon. Überschreiben?`, { ja: "Überschreiben" }))) return;
+      await api("adminVorlageSpeichern", { lanId: l.id, name });
+      toast("Vorlage „" + name + "“ gespeichert.", "ok");
+      m.schliessen(); neuZeichnen();
+    });
+    const va = $("[data-v-anwenden]", m.el);
+    if (va) va.onclick = async () => {
+      const wahl = $("[data-v-wahl]", m.el);
+      const v = vorlagen.find((x) => x.id === Number(wahl.value));
+      if (!(await bestaetigen(`Plan von „${l.name}“ durch die Vorlage „${v.name}“ ersetzen? Gruppen-Vormerkungen dieser LAN gehen dabei verloren.`, { ja: "Ersetzen", gefahr: true }))) return;
+      mitSperre(va, async () => { await api("adminVorlageAnwenden", { lanId: l.id, vorlageId: v.id }); toast("Vorlage angewendet.", "ok"); m.schliessen(); neuZeichnen(); });
+    };
   };
   $("[data-neu]", box).onclick = () => bearbeiten();
   $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => bearbeiten(ls.find((l) => l.id === Number(b.dataset.bearbeiten)))));
+  $$("[data-sitze]", box).forEach((b) => (b.onclick = () => sitzStatusBearbeiten(ls.find((l) => l.id === Number(b.dataset.sitze)))));
+  $$("[data-vloeschen]", box).forEach((b) => (b.onclick = async () => {
+    const v = vorlagen.find((x) => x.id === Number(b.dataset.vloeschen));
+    if (!(await bestaetigen(`Vorlage „${v.name}“ löschen? LANs, die sie benutzt haben, bleiben unverändert.`, { ja: "Löschen", gefahr: true }))) return;
+    mitSperre(b, async () => { await api("adminVorlageLoeschen", { vorlageId: v.id }); toast("Vorlage gelöscht.", "ok"); neuZeichnen(); });
+  }));
+}
+
+// Plätze einer LAN sperren oder für die Orga reservieren. Werkzeug wählen, dann
+// Plätze anklicken (mit der Maus auch über mehrere ziehen) oder ganze Reihen.
+async function sitzStatusBearbeiten(l) {
+  const daten = await api("sitzplan", { lanId: l.id });
+  const merkmal = new Map(daten.sitze.map((s) => [s.id, s.status === "gesperrt" ? "gesperrt" : s.orga ? "orga" : "frei"]));
+  const vorher = new Map(merkmal);
+  const vergeben = (s) => s.status === "belegt" || s.status === "reserviert";
+  const reihe = (s) => (s.label.match(/^[^\d]+/) || [s.label])[0];
+  let werkzeug = "gesperrt";
+  const m = modal("Plätze: " + l.name, `<div class="stapel">
+    <div class="zeile" style="gap:6px">
+      <button class="knopf klein" data-w="gesperrt">Sperren</button><button class="knopf klein" data-w="orga">Für Orga reservieren</button><button class="knopf klein" data-w="frei">Freigeben</button>
+      <label class="check klein" style="margin-left:6px"><input type="checkbox" data-reihe> ganze Reihe</label>
+      <span style="flex:1"></span><button class="knopf klein" data-z="-1" title="Verkleinern">−</button><button class="knopf klein" data-z="1" title="Vergrößern">+</button></div>
+    <div class="klein" id="ss-info"></div>
+    <div class="plan-buehne" id="ss-buehne" style="max-height:60vh;max-height:60dvh"></div>
+    <p class="klein leise" style="margin:0">Gesperrte Plätze kann niemand buchen. Orga-Plätze können nur Orga und Veranstalter nehmen oder im Ticket-Dialog vergeben; sie zählen nicht als freie Plätze. Plätze, auf denen schon ein Gast sitzt, behalten ihren Gast.</p>
+    <div class="zeile"><button class="knopf primaer" data-ok>Speichern</button><button class="knopf geist" data-ab>Abbrechen</button><span class="klein leise" id="ss-aend"></span></div></div>`, { breit: true });
+  const buehne = $("#ss-buehne", m.el);
+  let zoom = Math.min(1.4, Math.max(0.45, (buehne.clientWidth - 30) / (daten.plan.breite * U + 12)));
+  const anzeige = (s) => (vergeben(s) ? s.status : merkmal.get(s.id));
+  const klasse = (s) => `sitz s-${anzeige(s)}${vergeben(s) && merkmal.get(s.id) !== "frei" ? " markiert" : ""}`;
+  const stand = () => {
+    const z = { gesperrt: 0, orga: 0 };
+    for (const v of merkmal.values()) if (z[v] !== undefined) z[v]++;
+    $("#ss-info", m.el).innerHTML = `${daten.sitze.length} Plätze · <b>${z.gesperrt}</b> gesperrt · <b>${z.orga}</b> für die Orga · ${daten.sitze.length - z.gesperrt - z.orga} buchbar`;
+    const n = [...merkmal].filter(([id, v]) => vorher.get(id) !== v).length;
+    $("#ss-aend", m.el).textContent = n ? `${n} Änderung${n === 1 ? "" : "en"} nicht gespeichert` : "";
+    $$("[data-w]", m.el).forEach((b) => b.classList.toggle("primaer", b.dataset.w === werkzeug));
+  };
+  const zeichnen = () => { buehne.innerHTML = planSvg(daten.plan, daten.sitze.map((s) => ({ ...s, status: anzeige(s), meins: false, meineGruppe: false })), { zoom }); stand(); };
+  const setzen = (s) => {
+    const ziele = $("[data-reihe]", m.el).checked ? daten.sitze.filter((x) => reihe(x) === reihe(s)) : [s];
+    for (const x of ziele) {
+      merkmal.set(x.id, werkzeug);
+      const g = buehne.querySelector(`[data-sitz="${CSS.escape(x.id)}"]`);
+      if (g) g.setAttribute("class", klasse(x));
+    }
+    stand();
+  };
+  const sitzAus = (e) => { const g = e.target.closest && e.target.closest("[data-sitz]"); return g ? daten.sitze.find((x) => x.id === g.dataset.sitz) : null; };
+  // Maus: gedrückt halten und ziehen markiert mehrere Plätze. Touch: einzeln antippen.
+  let malen = false;
+  buehne.addEventListener("pointerdown", (e) => { const s = sitzAus(e); if (!s) return; e.preventDefault(); malen = e.pointerType === "mouse"; setzen(s); });
+  buehne.addEventListener("pointerover", (e) => { if (!malen) return; const s = sitzAus(e); if (s && merkmal.get(s.id) !== werkzeug) setzen(s); });
+  const loslassen = () => { malen = false; };
+  window.addEventListener("pointerup", loslassen);
+  tooltipAnbinden(buehne, (id) => { const s = daten.sitze.find((x) => x.id === id); return s ? { ...s, status: anzeige(s) } : null; });
+  $$("[data-w]", m.el).forEach((b) => (b.onclick = () => { werkzeug = b.dataset.w; stand(); }));
+  $$("[data-z]", m.el).forEach((b) => (b.onclick = () => { zoom = Math.min(2.5, Math.max(0.4, zoom + Number(b.dataset.z) * 0.2)); zeichnen(); }));
+  const zu = () => { window.removeEventListener("pointerup", loslassen); m.schliessen(); };
+  $("[data-ab]", m.el).onclick = async () => {
+    if ([...merkmal].some(([id, v]) => vorher.get(id) !== v) && !(await bestaetigen("Änderungen verwerfen?", { ja: "Verwerfen" }))) return;
+    zu();
+  };
+  const ok = $("[data-ok]", m.el);
+  ok.onclick = () => mitSperre(ok, async () => {
+    const aenderungen = [...merkmal].filter(([id, v]) => vorher.get(id) !== v).map(([id, status]) => ({ id, status }));
+    if (aenderungen.length) await api("adminSitzStatus", { lanId: l.id, aenderungen });
+    toast(aenderungen.length ? `${aenderungen.length} Plätze geändert.` : "Keine Änderungen.", "ok");
+    zu();
+  });
+  zeichnen();
 }
 
 // ---------------------------------------------------------------------------
@@ -502,7 +620,7 @@ async function lans(box) {
 async function platzWaehlen(t, feld) {
   const daten = await api("sitzplan", { lanId: t.lanId });
   const sitze = daten.sitze.map((s) => ({ ...s, meins: false, meineGruppe: false }));
-  const waehlbar = (s) => s.id === t.sitzId || ["frei", "gruppe", "gesperrt"].includes(s.status);
+  const waehlbar = (s) => s.id === t.sitzId || ["frei", "gruppe", "orga", "gesperrt"].includes(s.status);
   let gewaehlt = sitze.find((s) => s.label.toLowerCase() === feld.value.trim().toLowerCase()) || null;
   const m = modal("Platz für " + t.nutzer.nick, `<div class="stapel">
     <div class="zeile zwischen" style="align-items:center"><div class="klein" id="pw-info"></div>
@@ -520,7 +638,7 @@ async function platzWaehlen(t, feld) {
     });
     const frei = sitze.filter((s) => s.status === "frei").length;
     info.innerHTML = gewaehlt && gewaehlt.id !== t.sitzId
-      ? `Gewählt: ${sitzInfo(gewaehlt)}${gewaehlt.status === "gruppe" ? ` <span class="gold">– der Gruppe wird der Platz damit genommen</span>` : ""}${gewaehlt.status === "gesperrt" ? ` <span class="gold">– Platz ist gesperrt</span>` : ""}`
+      ? `Gewählt: ${sitzInfo(gewaehlt)}${gewaehlt.status === "gruppe" ? ` <span class="gold">– der Gruppe wird der Platz damit genommen</span>` : ""}${gewaehlt.status === "gesperrt" ? ` <span class="gold">– Platz ist gesperrt</span>` : ""}${gewaehlt.status === "orga" ? ` <span class="gold">– Orga-Platz</span>` : ""}`
       : `Aktuell: <b>${esc(t.sitz || "kein Platz")}</b> · ${frei} Plätze frei. Klicke einen freien Platz an.`;
   };
   buehne.addEventListener("click", (e) => {

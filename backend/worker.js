@@ -93,6 +93,9 @@ const SCHEMA = [
     teaser TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '',
     datum TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // Sitzplan-Vorlagen: Plan (Fläche, Deko) + Plätze inkl. Sperren/Orga, für neue LANs abrufbar.
+  `CREATE TABLE IF NOT EXISTS plan_vorlagen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, daten TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   // Anmeldungen am Hallen-Portal: welches Gerät (MAC/IP) mit welchem Ticket online ging.
   `CREATE TABLE IF NOT EXISTS netz_logins (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, lan_id INTEGER,
@@ -110,6 +113,7 @@ const SCHEMA = [
 const MIGRATIONEN = [
   "ALTER TABLE users ADD COLUMN discord_id TEXT NOT NULL DEFAULT ''",   // für die AgeLan-App (Discord-DMs)
   "ALTER TABLE users ADD COLUMN streamer INTEGER NOT NULL DEFAULT 0",   // darf sich im Streamplan eintragen
+  "ALTER TABLE seats ADD COLUMN orga INTEGER NOT NULL DEFAULT 0",       // für die Orga reserviert
 ];
 
 // Einstellungen mit Standardwerten. Gespeichert wird nur, was abweicht.
@@ -498,9 +502,11 @@ function ticketAus(t) {
 
 // Belegungszahlen einer LAN
 async function zahlen(env, lan) {
-  const sitze = await eins(env, "SELECT COUNT(*) AS n FROM seats WHERE lan_id = ? AND gesperrt = 0", lan.id);
+  // Gesperrte und Orga-Plätze zählen nicht als buchbar; Tickets auf Orga-Plätzen deshalb auch nicht.
+  const sitze = await eins(env, "SELECT COUNT(*) AS n FROM seats WHERE lan_id = ? AND gesperrt = 0 AND orga = 0", lan.id);
   const mitSitz = await eins(env, `SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id
-    WHERE t.lan_id = ? AND t.status != 'storniert' AND tt.mit_sitz = 1`, lan.id);
+    LEFT JOIN seats s ON s.id = t.seat_id
+    WHERE t.lan_id = ? AND t.status != 'storniert' AND tt.mit_sitz = 1 AND COALESCE(s.orga, 0) = 0`, lan.id);
   const gaeste = await eins(env, "SELECT COUNT(*) AS n, SUM(status = 'bezahlt') AS bezahlt FROM tickets WHERE lan_id = ? AND status != 'storniert'", lan.id);
   const kapazitaet = Math.min(sitze.n, lan.gaeste_limit || sitze.n);
   return {
@@ -598,6 +604,7 @@ const AKTIONEN = {
         let status = "frei";
         if (s.gesperrt) status = "gesperrt";
         else if (s.t_status) status = s.t_status === "bezahlt" ? "belegt" : "reserviert";
+        else if (s.orga) status = "orga";
         else if (gruppeAktiv) status = "gruppe";
         const gruppeId = s.t_status ? s.t_group : (gruppeAktiv ? s.group_id : null);
         return {
@@ -605,6 +612,7 @@ const AKTIONEN = {
           nick: s.t_status && namenZeigen ? s.t_nick : "",
           gruppe: s.t_status ? (namenZeigen ? s.tg_name || "" : "") : (gruppeAktiv ? s.g_name : ""),
           gruppenSitz: !!gruppeAktiv,
+          orga: !!s.orga,
           meins: !!(c.ich && s.t_user === c.ich.id),
           meineGruppe: !!(meineGruppe && (gruppeId === meineGruppe || (gruppeAktiv && s.group_id === meineGruppe))),
         };
@@ -820,7 +828,7 @@ const AKTIONEN = {
     if (!t) throw new F(409, "Du brauchst zuerst ein Ticket.");
     if (!t.mit_sitz) throw new F(409, "Dein Ticket enthält keinen Sitzplatz.");
     if (t.checkin_at && u.rolle === "user") throw new F(409, "Nach dem Check-in kann nur die Orga deinen Platz ändern.");
-    await sitzSetzen(env, t.id, u.id, lan.id, String(c.body.sitzId || ""), false);
+    await sitzSetzen(env, t.id, u.id, lan.id, String(c.body.sitzId || ""), false, u.rolle !== "user");
     await protokoll(c, "sitz", { sitz: c.body.sitzId });
     return { ok: true };
   },
@@ -914,6 +922,7 @@ const AKTIONEN = {
         LEFT JOIN tickets t ON t.seat_id = s.id LEFT JOIN groups g2 ON g2.id = s.group_id WHERE s.id = ? AND s.lan_id = ?`, id, g.lan_id);
       if (!s) throw new F(404, "Einen der Plätze gibt es nicht.");
       if (s.gesperrt) throw new F(409, "Platz " + s.label + " ist gesperrt.");
+      if (s.orga && u.rolle === "user") throw new F(409, "Platz " + s.label + " ist für die Orga reserviert.");
       if (s.t_user && !mitglieder.includes(s.t_user)) throw new F(409, "Platz " + s.label + " ist schon belegt.");
       if (s.group_id && s.group_id !== g.id && s.g_ablauf > jetzt) throw new F(409, "Platz " + s.label + " ist von einer anderen Gruppe vorgemerkt.");
     }
@@ -1223,23 +1232,92 @@ const AKTIONEN = {
     } else {
       const r = await los(env, "INSERT INTO lans (name, start, ende, gaeste_limit, verkauf_offen, ort, adresse, beschreibung, aktiv, created_at) VALUES (?,?,?,?,?,?,?,?,0,?)", ...werte, Date.now());
       id = r.meta.last_row_id;
-      // Neue LAN übernimmt Sitzplan und Ticketsorten der bisher aktiven.
+      // Neue LAN übernimmt die Ticketsorten der bisher aktiven. Sitzplan: gewählte
+      // Vorlage, sonst „leer“, sonst wie die aktive LAN.
       const vorlage = await aktiveLan(env);
       const stmts = [];
-      for (const s of await alle(env, "SELECT * FROM seats WHERE lan_id = ?", vorlage.id)) {
-        stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt) VALUES (?,?,?,?,?,?)", zufallsId(), id, s.label, s.x, s.y, s.gesperrt));
+      const planQuelle = String(l.planVorlage || "aktiv");
+      if (planQuelle !== "aktiv") stmts.push(...(await vorlageStatements(env, id, planQuelle)));
+      else for (const s of await alle(env, "SELECT * FROM seats WHERE lan_id = ?", vorlage.id)) {
+        stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, orga) VALUES (?,?,?,?,?,?,?)", zufallsId(), id, s.label, s.x, s.y, s.gesperrt, s.orga || 0));
       }
       for (const t of await alle(env, "SELECT * FROM ticket_types WHERE lan_id = ?", vorlage.id)) {
         stmts.push(st(env, "INSERT INTO ticket_types (lan_id, sort, name, beschreibung, features, preis_cent, extras, mit_sitz, aktiv, kaufbar, limit_anzahl) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           id, t.sort, t.name, t.beschreibung, t.features, t.preis_cent, t.extras, t.mit_sitz, t.aktiv, t.kaufbar, t.limit_anzahl));
       }
-      const plan = await eins(env, "SELECT value FROM settings WHERE key = ?", "plan:" + vorlage.id);
+      const plan = planQuelle === "aktiv" ? await eins(env, "SELECT value FROM settings WHERE key = ?", "plan:" + vorlage.id) : null;
       if (plan) stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + id, plan.value));
       if (stmts.length) await env.DB.batch(stmts);
     }
     if (l.aktiv) await env.DB.batch([st(env, "UPDATE lans SET aktiv = 0"), st(env, "UPDATE lans SET aktiv = 1 WHERE id = ?", id)]);
     await protokoll(c, "lan", l.name);
     return AKTIONEN.adminLans(c);
+  },
+
+  // ---------- Verwaltung: Sitzplätze sperren / für die Orga reservieren ----------
+  // status: "frei" | "gesperrt" | "orga". Belegte Plätze bleiben belegt – nur ihr Merkmal ändert sich.
+  async adminSitzStatus(c) {
+    const { env, body } = c;
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const aenderungen = Array.isArray(body.aenderungen) ? body.aenderungen.slice(0, 3000) : [];
+    const stmts = [];
+    for (const a of aenderungen) {
+      if (!["frei", "gesperrt", "orga"].includes(a.status)) throw new F(400, "Unbekannter Platzstatus.");
+      stmts.push(st(env, "UPDATE seats SET gesperrt = ?, orga = ? WHERE id = ? AND lan_id = ?",
+        a.status === "gesperrt" ? 1 : 0, a.status === "orga" ? 1 : 0, String(a.id), lan.id));
+    }
+    if (stmts.length) await env.DB.batch(stmts);
+    await protokoll(c, "sitz-status", { lan: lan.id, anzahl: stmts.length });
+    return { ok: true, geaendert: stmts.length };
+  },
+
+  // ---------- Verwaltung: Sitzplan-Vorlagen ----------
+  async adminVorlagen(c) {
+    brauchtAdmin(c);
+    const zeilen = await alle(c.env, "SELECT id, name, daten, created_at FROM plan_vorlagen ORDER BY name COLLATE NOCASE");
+    return { vorlagen: zeilen.map((v) => {
+      const d = parse(v.daten, { sitze: [] });
+      return { id: v.id, name: v.name, sitze: d.sitze.length, gesperrt: d.sitze.filter((s) => s.gesperrt).length, orga: d.sitze.filter((s) => s.orga).length, erstellt: v.created_at };
+    }) };
+  },
+
+  // Aktuellen Plan einer LAN als Vorlage speichern (gleicher Name = überschreiben).
+  async adminVorlageSpeichern(c) {
+    const { env, body } = c;
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const name = text(body.name, 60, "Name der Vorlage", true);
+    const plan = parse((await eins(env, "SELECT value FROM settings WHERE key = ?", "plan:" + lan.id) || {}).value, null) || { breite: 20, hoehe: 20, deko: [] };
+    const sitze = (await alle(env, "SELECT label, x, y, gesperrt, orga FROM seats WHERE lan_id = ? ORDER BY y, x", lan.id))
+      .map((s) => ({ label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt ? 1 : 0, orga: s.orga ? 1 : 0 }));
+    if (!sitze.length) throw new F(409, "Diese LAN hat noch keine Plätze.");
+    const daten = JSON.stringify({ plan, sitze });
+    const alt = await eins(env, "SELECT id FROM plan_vorlagen WHERE lower(name) = lower(?)", name);
+    if (alt) await los(env, "UPDATE plan_vorlagen SET daten = ?, created_at = ? WHERE id = ?", daten, Date.now(), alt.id);
+    else await los(env, "INSERT INTO plan_vorlagen (name, daten, created_at) VALUES (?,?,?)", name, daten, Date.now());
+    await protokoll(c, "vorlage-speichern", name);
+    return { ...(await AKTIONEN.adminVorlagen(c)), ueberschrieben: !!alt };
+  },
+
+  async adminVorlageLoeschen(c) {
+    brauchtAdmin(c);
+    await los(c.env, "DELETE FROM plan_vorlagen WHERE id = ?", Number(c.body.vorlageId));
+    await protokoll(c, "vorlage-loeschen", { id: c.body.vorlageId });
+    return AKTIONEN.adminVorlagen(c);
+  },
+
+  // Vorlage auf eine bestehende LAN anwenden – nur solange dort kein Gast einen Platz hat.
+  async adminVorlageAnwenden(c) {
+    const { env, body } = c;
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const besetzt = await alle(env, "SELECT s.label FROM seats s JOIN tickets t ON t.seat_id = s.id WHERE s.lan_id = ?", lan.id);
+    if (besetzt.length) throw new F(409, `In dieser LAN haben schon ${besetzt.length} Gäste einen Platz (${besetzt.slice(0, 8).map((s) => s.label).join(", ")}${besetzt.length > 8 ? " …" : ""}). Eine Vorlage geht nur bei einem Plan ohne vergebene Plätze – sonst im Sitzplan-Editor ändern.`);
+    const stmts = [st(env, "DELETE FROM seats WHERE lan_id = ?", lan.id), ...(await vorlageStatements(env, lan.id, body.vorlageId))];
+    await env.DB.batch(stmts);
+    await protokoll(c, "vorlage-anwenden", { lan: lan.id, vorlage: body.vorlageId });
+    return { ok: true };
   },
 
   // ---------- Verwaltung: News ----------
@@ -1531,10 +1609,25 @@ async function preisBerechnen(c, lan) {
   return { typRoh: typ, extras, summeCent: summe, rabattCent: rabatt, endCent: summe - rabatt, couponId, couponText };
 }
 
-async function sitzSetzen(env, ticketId, userId, lanId, sitzId, durchOrga) {
+// Sitze + Plan einer Vorlage in eine LAN schreiben ("leer" = leerer Plan).
+async function vorlageStatements(env, lanId, vorlageId) {
+  let daten = { plan: { breite: 30, hoehe: 20, deko: [] }, sitze: [] };
+  if (String(vorlageId) !== "leer") {
+    const v = await eins(env, "SELECT daten FROM plan_vorlagen WHERE id = ?", Number(vorlageId));
+    if (!v) throw new F(404, "Diese Sitzplan-Vorlage gibt es nicht.");
+    daten = parse(v.daten, daten);
+  }
+  const stmts = daten.sitze.map((s) => st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, orga) VALUES (?,?,?,?,?,?,?)",
+    zufallsId(), lanId, s.label, s.x, s.y, s.gesperrt ? 1 : 0, s.orga ? 1 : 0));
+  stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lanId, JSON.stringify(daten.plan)));
+  return stmts;
+}
+
+async function sitzSetzen(env, ticketId, userId, lanId, sitzId, durchOrga, istOrgaMitglied = false) {
   const s = await eins(env, `SELECT s.*, g.ablauf AS g_ablauf, g.name AS g_name FROM seats s LEFT JOIN groups g ON g.id = s.group_id WHERE s.id = ? AND s.lan_id = ?`, sitzId, lanId);
   if (!s) throw new F(404, "Diesen Platz gibt es nicht.");
   if (s.gesperrt && !durchOrga) throw new F(409, "Dieser Platz ist gesperrt.");
+  if (s.orga && !durchOrga && !istOrgaMitglied) throw new F(409, "Platz " + s.label + " ist für die Orga reserviert.");
   const belegt = await eins(env, "SELECT id FROM tickets WHERE seat_id = ?", sitzId);
   if (belegt && belegt.id !== ticketId) throw new F(409, "Platz " + s.label + " ist schon vergeben.");
   if (!durchOrga && s.group_id && s.g_ablauf > Date.now()) {

@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=17";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=17";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=17";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=17";
+import { api } from "./api.js?v=18";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=18";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=18";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=18";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
@@ -100,8 +100,9 @@ export async function render(main, param) {
     }
     const t = ich.ticket;
     if (!t || !t.typ.mitSitz || s.meins) return;
-    const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe);
-    if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : "Platz " + s.label + " ist nicht frei."); return; }
+    const istOrga = ["orga", "admin"].includes(ich.nutzer.rolle);
+    const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe) || (s.status === "orga" && istOrga);
+    if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : s.status === "orga" ? "Platz " + s.label + " ist für die Orga reserviert." : "Platz " + s.label + " ist nicht frei."); return; }
     if (t.checkinAt) { toast("Nach dem Check-in ändert nur die Orga deinen Platz."); return; }
     if (!(await bestaetigen(t.sitz ? `Von ${t.sitz} auf Platz ${s.label} wechseln?` : `Platz ${s.label} nehmen?`, { ja: "Ja, Platz nehmen" }))) return;
     try {

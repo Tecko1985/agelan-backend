@@ -1,9 +1,9 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=17";
+import { esc } from "./ui.js?v=18";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
-const STATUS_TEXT = { frei: "Frei", reserviert: "Reserviert (Zahlung offen)", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", gesperrt: "Gesperrt" };
+const STATUS_TEXT = { frei: "Frei", reserviert: "Reserviert (Zahlung offen)", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", orga: "Für die Orga reserviert", gesperrt: "Gesperrt" };
 
 export function dekoSvg(d, klasse = "") {
   const x = d.x * U, y = d.y * U, w = d.w * U, h = d.h * U;
@@ -62,5 +62,5 @@ export function tooltipAnbinden(container, sitzVonId) {
 export function legendeHtml() {
   return `<div class="legende">
     <div><i class="l-frei"></i>Frei</div><div><i class="l-reserviert"></i>Reserviert (Zahlung offen)</div><div><i class="l-belegt"></i>Belegt</div>
-    <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
+    <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-orga"></i>Für die Orga reserviert</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
 }

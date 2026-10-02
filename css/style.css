@@ -304,6 +304,8 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .sitz.s-belegt text, .sitz.s-reserviert text { fill: #fff; }
 .sitz.s-gruppe rect { fill: #1f4f9c; stroke: #6aa8ff; }
 .sitz.s-gruppe text { fill: #e2eeff; }
+.sitz.s-orga rect { fill: #0f5f5c; stroke: #3fd0c9; }
+.sitz.s-orga text { fill: #dcfffd; }
 .sitz.s-gesperrt rect { fill: #2a2a30; stroke: #444; }
 .sitz.s-gesperrt text { fill: #777; }
 .sitz.s-gesperrt { cursor: not-allowed; }
@@ -329,6 +331,7 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .l-gruppe { background: #1f4f9c; border-color: #6aa8ff !important; }
 .l-meinegruppe { background: transparent; border-color: var(--lila) !important; }
 .l-meins { background: var(--pink); border-color: #fff !important; }
+.l-orga { background: #0f5f5c; border-color: #3fd0c9 !important; }
 .l-gesperrt { background: #2a2a30; border-color: #444 !important; }
 .plan-tooltip { position: fixed; z-index: 90; pointer-events: none; background: #000d; border: 1px solid var(--rand2); padding: 8px 11px; border-radius: 9px; font-size: 0.85rem; max-width: 240px; }
 
