@@ -11,7 +11,30 @@ Für das Netzwerk-Team. Ziel: Gäste melden sich im Portal mit **Nickname + 5-st
 
 Die Coupons von den Bechern können parallel weiterlaufen. Kennt die Website den Code nicht, prüft das Portal wie bisher selbst.
 
-## Schnittstelle
+## Einfacher Endpunkt `/check_otp` (so eingebaut im Portal)
+
+```
+POST https://agelan-backend.michel-brunner.workers.dev/check_otp
+Content-Type: application/json
+
+{"username": "tecko", "otp": "ABC12"}
+```
+
+Die Antwort kommt immer mit HTTP 200 und JSON. Der eigentliche Status steht im Body:
+
+| Body | Bedeutung |
+|---|---|
+| `{"status": "200", "message": "Ok"}` | freischalten |
+| `{"status": "403", "message": "Nutzername oder Code falsch."}` | falscher Code, unbekannter Nick, nicht eingecheckt, gesperrt, zu viele Geräte (Text passt jeweils) |
+| `{"status": "429", "message": "…"}` | zu viele Fehlversuche (je Nick 10, je Absender-IP 100 in 10 Minuten) |
+| `{"status": "400", "message": "…"}` | kein JSON bzw. `username`/`otp` fehlen |
+| `{"status": "405", "message": "Nur POST"}` | falsche Methode |
+
+- **Groß/klein:** Beim Nutzernamen und beim Code ist das egal.
+- **Optional:** `"mac"` und `"ip"` können mitgeschickt werden. Dann erscheinen sie in der Verwaltung unter „Internet & Geräte“ und das Geräte-Limit greift.
+- **Ohne Geheimnis:** Der Endpunkt braucht kein gemeinsames Geheimnis. Gegen Durchprobieren schützen die Fehlversuch-Grenzen.
+
+## Erweiterte Schnittstelle (mit Geheimnis, MAC/IP Pflicht)
 
 ```
 POST https://agelan-backend.michel-brunner.workers.dev/api

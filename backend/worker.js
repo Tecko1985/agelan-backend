@@ -161,6 +161,7 @@ export default {
     const cors = corsKopf(request, env);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
+    if (/\/check_otp\/?$/.test(url.pathname)) return checkOtp(request, env, cors);
     if (!/\/api\/?$/.test(url.pathname)) return json({ error: "Nicht gefunden" }, 404, cors);
     if (request.method !== "POST") return json({ error: "Nur POST" }, 405, cors);
 
@@ -1408,13 +1409,13 @@ async function portalPruefen(env, body, speichern) {
   const mac = macNorm(body.mac);
   const ip = ipNorm(body.ip);
   const jetzt = Date.now();
-  if (speichern && !mac) throw new F(400, "MAC-Adresse fehlt oder ist ungültig.");
+  if (speichern && !mac && !body.ohneMac) throw new F(400, "MAC-Adresse fehlt oder ist ungültig.");
 
-  // Bremse: höchstens 10 Fehlversuche je Gerät in 10 Minuten.
-  if (mac) {
-    const fehl = await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, jetzt - 10 * 60e3);
-    if (fehl.n >= 10) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
-  }
+  // Bremse: höchstens 10 Fehlversuche je Gerät (bzw. ohne MAC: je Nutzername) in 10 Minuten.
+  const fehl = mac
+    ? await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, jetzt - 10 * 60e3)
+    : await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), jetzt - 10 * 60e3);
+  if (nutzer && fehl.n >= 10) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
 
   const t = !nutzer ? null : await eins(env, `SELECT t.*, u.nick, u.gesperrt, s.label AS sitz_label FROM tickets t
       JOIN users u ON u.id = t.user_id LEFT JOIN seats s ON s.id = t.seat_id
@@ -1444,6 +1445,41 @@ async function portalPruefen(env, body, speichern) {
   return ok
     ? { ok: true, nick: t.nick, platz: t.sitz_label || "", ticketId: t.id }
     : { ok: false, meldung, grund };
+}
+
+// Captive Portal: POST /check_otp {"username","otp"} (optional "mac", "ip").
+// Antwort immer HTTP 200 mit {"status": "200"|"4xx", "message": "…"}.
+const otpFehlschlaege = new Map();
+async function checkOtp(request, env, cors) {
+  const antwort = (status, message) => json({ status: String(status), message }, 200, cors);
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (request.method !== "POST") return antwort(405, "Nur POST");
+  let body;
+  try { body = await request.json(); } catch (e) { return antwort(400, "JSON erwartet"); }
+  if (!body || typeof body !== "object") return antwort(400, "JSON erwartet");
+  const username = String(body.username ?? "").trim();
+  const otp = String(body.otp ?? "").trim();
+  if (!username || !otp) return antwort(400, "username und otp fehlen");
+
+  // Gegen Durchprobieren von außen: je Absender-IP höchstens 100 Fehlversuche in 10 Minuten
+  // (das Portal der Halle schickt alle Gäste über dieselbe IP).
+  const ip = request.headers.get("CF-Connecting-IP") || "?";
+  const e = otpFehlschlaege.get(ip);
+  if (e && e.bis > Date.now() && e.anzahl >= 100) return antwort(429, "Zu viele Fehlversuche, bitte später nochmal");
+
+  try {
+    if (!env.DB) throw new Error("Datenbank-Binding DB fehlt");
+    await bereitmachen(env);
+    const r = await portalPruefen(env, { nutzer: username, code: otp, mac: body.mac, ip: body.ip, ohneMac: true }, true);
+    if (r.ok) return antwort(200, "Ok");
+    if (!e || e.bis < Date.now()) otpFehlschlaege.set(ip, { anzahl: 1, bis: Date.now() + 10 * 60e3 });
+    else e.anzahl++;
+    return antwort(r.grund === "gebremst" ? 429 : 403, r.meldung || "Secret falsch");
+  } catch (err) {
+    if (err instanceof F) return antwort(err.status, err.message);
+    console.error(err);
+    return antwort(500, "Interner Fehler");
+  }
 }
 
 function netzZeile(z) {
