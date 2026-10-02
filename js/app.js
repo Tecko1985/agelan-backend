@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=8";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=8";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=9";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=9";
 
 export const zustand = { daten: null, ich: null };
 
@@ -46,7 +46,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=8")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=9")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -65,7 +65,7 @@ function rahmenZeichnen() {
   $("#fuss").innerHTML = `
     <div><img src="img/logo.webp" alt="AGE LAN" width="64" height="64" style="margin-bottom:8px">
       <div>${esc(s.slogan)}</div><div class="klein leiser" style="margin-top:6px">© ${new Date().getFullYear()} AGE-LAN · Private Veranstaltung</div></div>
-    <div class="zeile" style="gap:18px"><a href="#/faq">FAQ</a><a href="#/seite/anfahrt">Anfahrt</a><a href="#/seite/agb">Teilnahmebedingungen</a><a href="#/seite/datenschutz">Datenschutz</a><a href="#/seite/impressum">Impressum</a></div>
+    <div class="zeile" style="gap:18px"><a href="#/faq">FAQ</a><a href="#/packliste">Packliste</a><a href="#/seite/anfahrt">Anfahrt</a><a href="#/seite/agb">Teilnahmebedingungen</a><a href="#/seite/datenschutz">Datenschutz</a><a href="#/seite/impressum">Impressum</a></div>
     <div class="socials">${socials}</div>`;
 }
 
@@ -76,16 +76,17 @@ const SEITEN = {
   "": seiteStart,
   lan: seiteLan,
   faq: seiteFaq,
+  packliste: seitePackliste,
   news: seiteNews,
   gaeste: seiteGaeste,
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=8")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=8")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=8")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=8")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=8")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=9")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=9")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=9")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=9")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=9")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -165,7 +166,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=8");
+    const konto = await import("./konto.js?v=9");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -315,6 +316,63 @@ async function seiteFaq(main) {
   const d = zustand.daten || await neuLaden();
   main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><h1>FAQ</h1></div>
     ${d.einstellungen.faq.map((f, i) => `<details class="faq" ${i === 0 ? "open" : ""}><summary>${esc(f.f)}</summary><div>${esc(f.a)}</div></details>`).join("")}</div>`;
+}
+
+// Packliste: fest im Code, Haken merkt sich nur der eigene Browser.
+const PACKLISTE = [
+  ["Rechner & Zubehör", [
+    ["pc", "PC oder Laptop"],
+    ["netzteil", "Stromkabel für PC und Monitor (bzw. Laptop-Netzteil)"],
+    ["monitor", "Monitor mit passendem Kabel (HDMI / DisplayPort)"],
+    ["maus", "Maus und Mauspad"],
+    ["tastatur", "Tastatur"],
+    ["headset", "Headset oder Kopfhörer"],
+    ["lankabel", "Netzwerkkabel, am besten 5 m oder länger"],
+    ["steckdose", "Mehrfachsteckdose"],
+  ]],
+  ["Vorher zu Hause erledigen", [
+    ["update", "Age of Empires 2 und Windows auf den neuesten Stand bringen"],
+    ["login", "Zugangsdaten für Steam bzw. Microsoft-Konto parat haben"],
+    ["treiber", "Grafiktreiber aktualisieren"],
+  ]],
+  ["Persönliches", [
+    ["ticket", "Ticket (QR-Code auf dem Handy oder ausgedruckt)"],
+    ["ausweis", "Personalausweis"],
+    ["muttizettel", "Unter 18: unterschriebener Muttizettel und Aufsichtsperson"],
+    ["bargeld", "Etwas Bargeld"],
+    ["handy", "Handy mit Ladekabel"],
+    ["kleidung", "Bequeme Kleidung und Wechselsachen"],
+  ]],
+  ["Übernachtung", [
+    ["schlafsack", "Schlafsack oder Decke und Kissen"],
+    ["isomatte", "Isomatte oder Luftmatratze"],
+    ["handtuch", "Handtuch und Duschzeug"],
+    ["ohrstoepsel", "Ohrstöpsel und Schlafmaske"],
+  ]],
+];
+const PACK_KEY = "packliste";
+
+function seitePackliste(main) {
+  let haken = {};
+  try { haken = JSON.parse(localStorage.getItem(PACK_KEY) || "{}") || {}; } catch (e) { /* privater Modus */ }
+  const alle = PACKLISTE.flatMap(([, punkte]) => punkte.map(([id]) => id));
+  main.innerHTML = `<div class="wrap" style="max-width:780px"><div class="seitenkopf"><span class="ueberzeile">Vor der LAN</span><h1>Packliste</h1>
+    <p>Das brauchst du typischerweise für die LAN. Strom und Netz gibt es an jedem Platz, Getränke und Essen vor Ort. Bier darf nicht mitgebracht werden.</p></div>
+    <div class="karte"><div class="zeile" style="justify-content:space-between"><b id="pk-stand"></b><button class="knopf klein geist" id="pk-reset">Alle Haken entfernen</button></div></div>
+    ${PACKLISTE.map(([titel, punkte]) => `<div class="karte" style="margin-top:14px"><h3>${esc(titel)}</h3>
+      <div class="packliste">${punkte.map(([id, text]) => `<label class="pack-punkt"><input type="checkbox" data-pack="${id}" ${haken[id] ? "checked" : ""}><span>${esc(text)}</span></label>`).join("")}</div></div>`).join("")}
+    <p class="leise klein" style="margin-top:14px">Die Haken werden nur auf diesem Gerät gespeichert.</p></div>`;
+  const stand = () => {
+    const n = alle.filter((id) => haken[id]).length;
+    $("#pk-stand", main).textContent = n === alle.length ? "Alles eingepackt." : `${n} von ${alle.length} erledigt`;
+  };
+  const speichern = () => { try { localStorage.setItem(PACK_KEY, JSON.stringify(haken)); } catch (e) { /* egal */ } };
+  $$("[data-pack]", main).forEach((cb) => (cb.onchange = () => {
+    if (cb.checked) haken[cb.dataset.pack] = 1; else delete haken[cb.dataset.pack];
+    speichern(); stand();
+  }));
+  $("#pk-reset", main).onclick = () => { haken = {}; speichern(); $$("[data-pack]", main).forEach((cb) => (cb.checked = false)); stand(); };
+  stand();
 }
 
 const TEXTSEITEN = { anfahrt: "Anfahrt", impressum: "Impressum", datenschutz: "Datenschutz", agb: "Teilnahmebedingungen" };

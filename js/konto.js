@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=8";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=8";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=8";
+import { api, tokenSetzen } from "./api.js?v=9";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=9";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=9";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -177,6 +177,7 @@ export async function render(main) {
         ${t.status === "offen" ? zahlInfo(t, za, kurz) : ""}
         ${t.typ.mitSitz && !t.sitz ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
         ${t.sitz ? `<p style="margin-top:14px">Dein Platz: <a class="abzeichen gold" href="#/sitzplan/${encodeURIComponent(t.sitz)}">${esc(t.sitz)}</a> ${t.checkinAt ? "" : `<a class="klein" href="#/sitzplan" style="margin-left:6px">ändern</a>`}</p>` : ""}
+        <a class="knopf klein geist" href="#/packliste" style="margin-top:14px">Packliste: Was brauche ich für die LAN?</a>
         ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
       </div>`;
     ticketUnten = `<div class="abschnitt-kopf" style="margin-top:36px"><div><span class="ueberzeile">Zum Vorzeigen beim Einlass</span><h2 style="margin:0">Dein Ticket</h2></div>

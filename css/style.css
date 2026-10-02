@@ -277,6 +277,11 @@ details.faq summary { cursor: pointer; padding: 14px 4px; font-weight: 600; list
 details.faq summary::after { content: "+"; color: var(--gold); font-size: 1.3rem; line-height: 1; transition: 0.2s; }
 details.faq[open] summary::after { transform: rotate(45deg); }
 details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-wrap; }
+.packliste { display: grid; }
+.pack-punkt { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-top: 1px solid var(--rand); cursor: pointer; }
+.pack-punkt:first-child { border-top: 0; }
+.pack-punkt input { width: 20px; height: 20px; flex: none; }
+.pack-punkt input:checked + span { color: var(--leise); text-decoration: line-through; }
 
 /* ---------- Sitzplan ---------- */
 .plan-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
