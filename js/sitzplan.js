@@ -1,7 +1,10 @@
-import { api } from "./api.js?v=7";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=7";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=7";
-import { planSvg, tooltipAnbinden, legendeHtml, U } from "./plan.js?v=7";
+import { api } from "./api.js?v=8";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=8";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=8";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=8";
+
+// Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
+const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
 
 export async function render(main, param) {
   await neuLaden();
@@ -17,7 +20,7 @@ export async function render(main, param) {
 
   main.innerHTML = `<div class="wrap">
     <div class="seitenkopf"><span class="ueberzeile">${esc(daten.lan.name)}</span><h1>Sitzplan</h1>
-      <p>${gruppenModus ? `Klicke Plätze an, um sie für <b>${esc(ich.gruppe.name)}</b> vorzumerken (max. ${maxSitze}). Mitglieder deiner Gruppe können sich dann darauf setzen.` : "Fahre über einen Platz für Details. Mit Ticket klickst du einen freien Platz an, um ihn zu nehmen."}</p></div>
+      <p>${gruppenModus ? `Klicke Plätze an, um sie für <b>${esc(ich.gruppe.name)}</b> vorzumerken (max. ${maxSitze}). Mitglieder deiner Gruppe können sich dann darauf setzen.` : (beruehrung ? "Tippe auf einen Platz für Details." : "Fahre über einen Platz für Details.") + " Mit Ticket " + (beruehrung ? "tippst" : "klickst") + " du einen freien Platz an, um ihn zu nehmen."}</p></div>
     <div class="plan-layout">
       <div>
         <div class="plan-werkzeug">
@@ -25,6 +28,7 @@ export async function render(main, param) {
           <input id="p-suche" placeholder="Nick oder Platz suchen …" style="max-width:240px">
           <span class="leise klein" id="p-stand"></span>
         </div>
+        <div class="plan-info leise klein" id="p-info" aria-live="polite"></div>
         <div class="plan-buehne" id="buehne"></div>
       </div>
       <aside class="stapel" id="seite"></aside>
@@ -77,9 +81,12 @@ export async function render(main, param) {
 
   buehne.addEventListener("click", async (e) => {
     const g = e.target.closest("[data-sitz]");
-    if (!g || !ich) return;
+    if (!g) return;
+    if (!ich) { const s = daten.sitze.find((x) => x.id === g.dataset.sitz); if (s) $("#p-info", main).innerHTML = sitzInfo(s); return; }
     const s = daten.sitze.find((x) => x.id === g.dataset.sitz);
     if (!s) return;
+    // Ohne Maus gibt es keinen Tooltip – Details stehen dann über dem Plan.
+    $("#p-info", main).innerHTML = sitzInfo(s);
     if (gruppenModus) {
       if (auswahl.has(s.id)) auswahl.delete(s.id);
       else {

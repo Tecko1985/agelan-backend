@@ -81,6 +81,7 @@ export function modal(titel, inhaltHtml, { breit = false, beimSchliessen = null 
   };
   hg.addEventListener("mousedown", (e) => { if (e.target === hg) schliessen(); });
   $(".x", hg).onclick = schliessen;
+  hg.schliessen = schliessen; // für den Router: Seitenwechsel schließt offene Dialoge
   document.addEventListener("keydown", taste);
   document.body.appendChild(hg);
   const erstes = $("input, select, textarea", inhalt);

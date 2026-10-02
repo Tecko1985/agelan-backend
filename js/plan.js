@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=7";
+import { esc } from "./ui.js?v=8";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
@@ -34,6 +34,11 @@ export function planSvg(plan, sitze, { zoom = 1, raster = false, klassen = () =>
     ${sitze.map((s) => sitzSvg(s, klassen(s, false))).join("")}
     ${extra}
   </svg>`;
+}
+
+// Kurzinfo zu einem Platz (Tooltip und Info-Zeile beim Antippen)
+export function sitzInfo(s) {
+  return `<b>Platz ${esc(s.label)}</b> · ${esc(STATUS_TEXT[s.status] || "")}${s.nick ? " · " + esc(s.nick) : ""}${s.gruppe ? " · " + esc(s.gruppe) : ""}${s.meins ? " · Dein Platz" : ""}`;
 }
 
 // Tooltip beim Überfahren eines Sitzes

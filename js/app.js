@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=7";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=7";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=8";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=8";
 
 export const zustand = { daten: null, ich: null };
 
@@ -46,14 +46,15 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=7")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=8")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
   if (zustand.ich) {
     const t = zustand.ich.ticket;
-    rechts.innerHTML = `<a class="knopf klein ${t ? "" : "primaer"}" href="${t ? "#/konto" : "#/tickets"}">${t ? "<span class='knopf-text'>Mein Ticket</span>" : "Ticket kaufen"}</a>
-      <a class="knopf klein geist" href="#/konto" title="Mein Konto"><span class="knopf-text">${esc(zustand.ich.nutzer.nick)}</span></a>`;
+    // Auf dem Handy kurze Beschriftungen statt leerer Knöpfe.
+    rechts.innerHTML = `<a class="knopf klein ${t ? "" : "primaer"}" href="${t ? "#/konto" : "#/tickets"}">${t ? "<span class='knopf-text'>Mein </span>Ticket" : "Ticket<span class='knopf-text'> kaufen</span>"}</a>
+      <a class="knopf klein geist" href="#/konto" title="Mein Konto"><span class="knopf-text">${esc(zustand.ich.nutzer.nick)}</span><span class="knopf-kurz">Konto</span></a>`;
   } else {
     rechts.innerHTML = `<a class="knopf klein geist" href="#/konto">Anmelden</a><a class="knopf klein primaer" href="#/tickets"><span>Ticket</span></a>`;
   }
@@ -80,11 +81,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=7")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=7")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=7")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=7")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=7")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=8")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=8")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=8")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=8")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=8")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -114,6 +115,8 @@ export async function route(ev) {
   }
   const meiner = ++lauf;
   rueckfrage = null;
+  // Offene Dialoge gehören zur alten Seite (z. B. Zurück-Wischen auf dem Handy).
+  $$(".modal-hg").forEach((h) => (h.schliessen ? h.schliessen() : h.remove()));
   const alt = aufraeumen;
   aufraeumen = [];
   alt.forEach((f) => { try { f(); } catch (e) { /* egal */ } });
@@ -162,7 +165,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=7");
+    const konto = await import("./konto.js?v=8");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
