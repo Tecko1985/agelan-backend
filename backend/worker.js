@@ -602,8 +602,9 @@ const AKTIONEN = {
       sitze: sitze.map((s) => {
         const gruppeAktiv = s.group_id && s.g_ablauf > jetzt;
         let status = "frei";
-        if (s.gesperrt) status = "gesperrt";
-        else if (s.t_status) status = s.t_status === "bezahlt" ? "belegt" : "reserviert";
+        // Ein Gast auf einem gesperrten/Orga-Platz bleibt sichtbar; die Merkmale stehen extra dabei.
+        if (s.t_status) status = s.t_status === "bezahlt" ? "belegt" : "reserviert";
+        else if (s.gesperrt) status = "gesperrt";
         else if (s.orga) status = "orga";
         else if (gruppeAktiv) status = "gruppe";
         const gruppeId = s.t_status ? s.t_group : (gruppeAktiv ? s.group_id : null);
@@ -613,6 +614,7 @@ const AKTIONEN = {
           gruppe: s.t_status ? (namenZeigen ? s.tg_name || "" : "") : (gruppeAktiv ? s.g_name : ""),
           gruppenSitz: !!gruppeAktiv,
           orga: !!s.orga,
+          gesperrt: !!s.gesperrt,
           meins: !!(c.ich && s.t_user === c.ich.id),
           meineGruppe: !!(meineGruppe && (gruppeId === meineGruppe || (gruppeAktiv && s.group_id === meineGruppe))),
         };
@@ -1227,6 +1229,8 @@ const AKTIONEN = {
       text(l.ort, 120, "Ort", false), text(l.adresse, 200, "Adresse", false), text(l.beschreibung, 4000, "Beschreibung", false),
     ];
     let id = Number(l.id) || 0;
+    const planQuelle = String(l.planVorlage || "aktiv");
+    if (!id && planQuelle !== "aktiv") await vorlageDaten(env, planQuelle); // wirft 404, bevor etwas angelegt ist
     if (id) {
       await los(env, "UPDATE lans SET name=?, start=?, ende=?, gaeste_limit=?, verkauf_offen=?, ort=?, adresse=?, beschreibung=? WHERE id = ?", ...werte, id);
     } else {
@@ -1236,7 +1240,6 @@ const AKTIONEN = {
       // Vorlage, sonst „leer“, sonst wie die aktive LAN.
       const vorlage = await aktiveLan(env);
       const stmts = [];
-      const planQuelle = String(l.planVorlage || "aktiv");
       if (planQuelle !== "aktiv") stmts.push(...(await vorlageStatements(env, id, planQuelle)));
       else for (const s of await alle(env, "SELECT * FROM seats WHERE lan_id = ?", vorlage.id)) {
         stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, orga) VALUES (?,?,?,?,?,?,?)", zufallsId(), id, s.label, s.x, s.y, s.gesperrt, s.orga || 0));
@@ -1463,7 +1466,7 @@ const AKTIONEN = {
     const zeilen = await alle(env, `SELECT n.*, u.nick, s.label AS sitz_label FROM netz_logins n
       LEFT JOIN tickets t ON t.id = n.ticket_id LEFT JOIN users u ON u.id = t.user_id LEFT JOIN seats s ON s.id = t.seat_id
       WHERE ${wo.join(" AND ")} ORDER BY n.id DESC LIMIT 500`, ...p);
-    const z = await eins(env, "SELECT COUNT(DISTINCT mac) AS geraete, COUNT(DISTINCT ticket_id) AS tickets FROM netz_logins WHERE lan_id = ? AND ok = 1", lan.id);
+    const z = await eins(env, "SELECT COUNT(DISTINCT CASE WHEN mac != '' THEN mac END) AS geraete, COUNT(DISTINCT ticket_id) AS tickets FROM netz_logins WHERE lan_id = ? AND ok = 1", lan.id);
     return { eintraege: zeilen.map(netzZeile), geraete: z.geraete, tickets: z.tickets, eingerichtet: !!env.PORTAL_SECRET };
   },
 
@@ -1531,7 +1534,7 @@ async function portalPruefen(env, body, speichern) {
   else if (!t.checkin_at) { grund = "nicht eingecheckt"; meldung = "Du bist noch nicht eingecheckt."; }
   else if (t.gesperrt) { grund = "Konto gesperrt"; meldung = "Dein Konto ist gesperrt. Bitte melde dich bei der Orga."; }
   else if (mac) {
-    const geraete = await alle(env, "SELECT DISTINCT mac FROM netz_logins WHERE ticket_id = ? AND ok = 1", t.id);
+    const geraete = await alle(env, "SELECT DISTINCT mac FROM netz_logins WHERE ticket_id = ? AND ok = 1 AND mac != ''", t.id);
     const max = e.maxGeraete == null ? 3 : Number(e.maxGeraete) || 0; // 0 = unbegrenzt
     if (max > 0 && !geraete.some((g) => g.mac === mac) && geraete.length >= max) {
       grund = "zu viele Geräte"; meldung = `Mit deinem Code sind schon ${geraete.length} Geräte angemeldet. Bitte melde dich bei der Orga.`;
@@ -1565,11 +1568,12 @@ async function checkOtp(request, env, cors) {
   const otp = String(body.otp ?? "").trim();
   if (!username || !otp) return antwort(400, "username und otp fehlen");
 
-  // Gegen Durchprobieren von außen: je Absender-IP höchstens 100 Fehlversuche in 10 Minuten
-  // (das Portal der Halle schickt alle Gäste über dieselbe IP).
+  // Gegen Durchprobieren von außen: je Absender-IP höchstens 300 Fehlversuche in 10 Minuten.
+  // Großzügig, weil das Portal der Halle alle Gäste über dieselbe IP schickt; je Nick
+  // bremst zusätzlich portalPruefen (10 Fehlversuche in 10 Minuten).
   const ip = request.headers.get("CF-Connecting-IP") || "?";
   const e = otpFehlschlaege.get(ip);
-  if (e && e.bis > Date.now() && e.anzahl >= 100) return antwort(429, "Zu viele Fehlversuche, bitte später nochmal");
+  if (e && e.bis > Date.now() && e.anzahl >= 300) return antwort(429, "Zu viele Fehlversuche, bitte später nochmal");
 
   try {
     if (!env.DB) throw new Error("Datenbank-Binding DB fehlt");
@@ -1636,13 +1640,15 @@ async function preisBerechnen(c, lan) {
 }
 
 // Sitze + Plan einer Vorlage in eine LAN schreiben ("leer" = leerer Plan).
+async function vorlageDaten(env, vorlageId) {
+  const leer = { plan: { breite: 30, hoehe: 20, deko: [] }, sitze: [] };
+  if (String(vorlageId) === "leer") return leer;
+  const v = await eins(env, "SELECT daten FROM plan_vorlagen WHERE id = ?", Number(vorlageId));
+  if (!v) throw new F(404, "Diese Sitzplan-Vorlage gibt es nicht.");
+  return parse(v.daten, leer);
+}
 async function vorlageStatements(env, lanId, vorlageId) {
-  let daten = { plan: { breite: 30, hoehe: 20, deko: [] }, sitze: [] };
-  if (String(vorlageId) !== "leer") {
-    const v = await eins(env, "SELECT daten FROM plan_vorlagen WHERE id = ?", Number(vorlageId));
-    if (!v) throw new F(404, "Diese Sitzplan-Vorlage gibt es nicht.");
-    daten = parse(v.daten, daten);
-  }
+  const daten = await vorlageDaten(env, vorlageId);
   const stmts = daten.sitze.map((s) => st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, orga) VALUES (?,?,?,?,?,?,?)",
     zufallsId(), lanId, s.label, s.x, s.y, s.gesperrt ? 1 : 0, s.orga ? 1 : 0));
   stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lanId, JSON.stringify(daten.plan)));

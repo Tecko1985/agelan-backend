@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=19";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=19";
-import { planSvg, U } from "./plan.js?v=19";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=19";
+import { api } from "./api.js?v=21";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=21";
+import { planSvg, U } from "./plan.js?v=21";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=21";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -36,7 +36,7 @@ export async function editor(container, lanId) {
   schliessen();
   const st = {
     plan: { breite: daten.plan.breite, hoehe: daten.plan.hoehe, deko: (daten.plan.deko || []).map((d) => ({ ...d })) },
-    sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick })),
+    sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt != null ? s.gesperrt : s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick })),
     auswahl: new Set(), werkzeug: "auswahl", zoom: 1, verlauf: [], geaendert: false,
   };
   const ac = new AbortController();

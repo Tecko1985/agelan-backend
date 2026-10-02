@@ -1,12 +1,12 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=19";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=19";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=19";
+import { api } from "./api.js?v=21";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=21";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=21";
 
 // jsQR (1.4.0, UMD, setzt window.jsQR) liegt lokal neben diesem Modul.
-const JSQR = new URL("./jsqr.js?v=19", import.meta.url).href;
+const JSQR = new URL("./jsqr.js?v=21", import.meta.url).href;
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);
@@ -70,7 +70,7 @@ export function scanText(roh) {
   return m ? m[1].toLowerCase() : String(roh || "").trim();
 }
 
-const KAMERA_KEY = "checkin-kamera";
+const KAMERA_KEY = "agelan-checkin-kamera";
 
 function skriptLaden(src) {
   return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { s.remove(); no(new Error("Skript nicht geladen")); }; document.head.appendChild(s); });

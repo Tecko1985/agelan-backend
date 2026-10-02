@@ -1,8 +1,8 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=19";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=19";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=19";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=19";
+import { api, istDemo } from "./api.js?v=21";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=21";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=21";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=21";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -207,7 +207,7 @@ async function ticketDetails(t, fertig) {
       const geraete = geraeteAus(r.eintraege.filter((e) => e.ok));
       const fehl = r.eintraege.filter((e) => !e.ok).length;
       ziel.classList.remove("leise");
-      ziel.innerHTML = (geraete.length ? geraete.map((g) => `<div><span class="mono">${esc(g.mac)}</span> · ${esc(g.ip || "–")} <span class="leise">· zuletzt ${esc(zeit(g.at))}</span></div>`).join("")
+      ziel.innerHTML = (geraete.length ? geraete.map((g) => `<div><span class="mono">${esc(g.mac || "ohne MAC")}</span> · ${esc(g.ip || "–")} <span class="leise">· zuletzt ${esc(zeit(g.at))}</span></div>`).join("")
         : `<span class="leise">${t.freigeschaltetAt ? "" : "Noch nicht am Portal angemeldet."}</span>`) + (fehl ? `<div class="rot">${fehl} Fehlversuch${fehl === 1 ? "" : "e"}</div>` : "");
     }).catch(() => { const ziel = $("#a-geraete", m.el); if (ziel) ziel.textContent = "–"; });
   }
@@ -251,7 +251,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=19");
+    const { ticketHtml } = await import("./konto.js?v=21");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -335,7 +335,7 @@ async function netz(box) {
       <td class="klein leise" style="white-space:nowrap">${esc(zeit(e.at))}</td>
       <td>${e.ok ? `<span class="abzeichen gruen">ok</span>` : `<span class="abzeichen rot">${esc(e.grund || "abgelehnt")}</span>`}</td>
       <td>${e.nick ? `<b>${esc(e.nick)}</b>${e.platz ? ` <span class="abzeichen gold">${esc(e.platz)}</span>` : ""}` : `<span class="leise">${esc(e.nutzer || "–")}</span>`}</td>
-      <td class="mono klein"><a href="#" data-mac="${esc(e.mac)}">${esc(e.mac)}</a></td><td class="mono klein">${esc(e.ip || "–")}</td></tr>`).join("")
+      <td class="mono klein">${e.mac ? `<a href="#" data-mac="${esc(e.mac)}">${esc(e.mac)}</a>` : `<span class="leise">–</span>`}</td><td class="mono klein">${esc(e.ip || "–")}</td></tr>`).join("")
       || `<tr><td colspan="5" class="leise">Keine Einträge.</td></tr>`;
     $$("[data-mac]", box).forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); $("[data-q]", box).value = a.dataset.mac; laden().catch(fehler); }));
   };
@@ -366,7 +366,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=19");
+  planModul = await import("./planeditor.js?v=21");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -562,7 +562,7 @@ async function lans(box) {
 // Plätze anklicken (mit der Maus auch über mehrere ziehen) oder ganze Reihen.
 async function sitzStatusBearbeiten(l) {
   const daten = await api("sitzplan", { lanId: l.id });
-  const merkmal = new Map(daten.sitze.map((s) => [s.id, s.status === "gesperrt" ? "gesperrt" : s.orga ? "orga" : "frei"]));
+  const merkmal = new Map(daten.sitze.map((s) => [s.id, s.gesperrt || s.status === "gesperrt" ? "gesperrt" : s.orga ? "orga" : "frei"]));
   const vorher = new Map(merkmal);
   const vergeben = (s) => s.status === "belegt" || s.status === "reserviert";
   const reihe = (s) => (s.label.match(/^[^\d]+/) || [s.label])[0];
@@ -588,7 +588,11 @@ async function sitzStatusBearbeiten(l) {
     $("#ss-aend", m.el).textContent = n ? `${n} Änderung${n === 1 ? "" : "en"} nicht gespeichert` : "";
     $$("[data-w]", m.el).forEach((b) => b.classList.toggle("primaer", b.dataset.w === werkzeug));
   };
-  const zeichnen = () => { buehne.innerHTML = planSvg(daten.plan, daten.sitze.map((s) => ({ ...s, status: anzeige(s), meins: false, meineGruppe: false })), { zoom }); stand(); };
+  const zeichnen = () => {
+    buehne.innerHTML = planSvg(daten.plan, daten.sitze.map((s) => ({ ...s, status: anzeige(s), meins: false, meineGruppe: false })),
+      { zoom, klassen: (s, istDeko) => (!istDeko && vergeben(s) && merkmal.get(s.id) !== "frei" ? "markiert" : "") });
+    stand();
+  };
   const setzen = (s) => {
     const ziele = $("[data-reihe]", m.el).checked ? daten.sitze.filter((x) => reihe(x) === reihe(s)) : [s];
     for (const x of ziele) {
@@ -600,15 +604,23 @@ async function sitzStatusBearbeiten(l) {
   };
   const sitzAus = (e) => { const g = e.target.closest && e.target.closest("[data-sitz]"); return g ? daten.sitze.find((x) => x.id === g.dataset.sitz) : null; };
   // Maus: gedrückt halten und ziehen markiert mehrere Plätze. Touch: einzeln antippen.
-  let malen = false;
-  buehne.addEventListener("pointerdown", (e) => { const s = sitzAus(e); if (!s) return; e.preventDefault(); malen = e.pointerType === "mouse"; setzen(s); });
+  let malen = false, maus = false;
+  buehne.addEventListener("pointerdown", (e) => {
+    maus = e.pointerType === "mouse";
+    if (!maus) return; // Touch/Stift: erst beim Antippen (click), Wischen scrollt
+    const s = sitzAus(e); if (!s) return;
+    e.preventDefault(); malen = true; setzen(s);
+  });
   buehne.addEventListener("pointerover", (e) => { if (!malen) return; const s = sitzAus(e); if (s && merkmal.get(s.id) !== werkzeug) setzen(s); });
+  buehne.addEventListener("click", (e) => { if (maus) return; const s = sitzAus(e); if (s) setzen(s); });
   const loslassen = () => { malen = false; };
   window.addEventListener("pointerup", loslassen);
+  const abbauen = new MutationObserver(() => { if (!buehne.isConnected) { window.removeEventListener("pointerup", loslassen); abbauen.disconnect(); } });
+  abbauen.observe(document.body, { childList: true });
   tooltipAnbinden(buehne, (id) => { const s = daten.sitze.find((x) => x.id === id); return s ? { ...s, status: anzeige(s) } : null; });
   $$("[data-w]", m.el).forEach((b) => (b.onclick = () => { werkzeug = b.dataset.w; stand(); }));
   $$("[data-z]", m.el).forEach((b) => (b.onclick = () => { zoom = Math.min(2.5, Math.max(0.4, zoom + Number(b.dataset.z) * 0.2)); zeichnen(); }));
-  const zu = () => { window.removeEventListener("pointerup", loslassen); m.schliessen(); };
+  const zu = () => m.schliessen();
   $("[data-ab]", m.el).onclick = async () => {
     if ([...merkmal].some(([id, v]) => vorher.get(id) !== v) && !(await bestaetigen("Änderungen verwerfen?", { ja: "Verwerfen" }))) return;
     zu();
