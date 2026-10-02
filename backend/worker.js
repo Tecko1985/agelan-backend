@@ -114,6 +114,7 @@ const MIGRATIONEN = [
   "ALTER TABLE users ADD COLUMN discord_id TEXT NOT NULL DEFAULT ''",   // für die AgeLan-App (Discord-DMs)
   "ALTER TABLE users ADD COLUMN streamer INTEGER NOT NULL DEFAULT 0",   // darf sich im Streamplan eintragen
   "ALTER TABLE seats ADD COLUMN orga INTEGER NOT NULL DEFAULT 0",       // für die Orga reserviert
+  "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
 ];
 
 // Einstellungen mit Standardwerten. Gespeichert wird nur, was abweicht.
@@ -1440,7 +1441,7 @@ const AKTIONEN = {
     const bremse = "portal:" + c.ip;
     if (!bremseOffen(bremse)) throw new F(429, "Zu viele Fehlversuche.");
     if (!(await gleich(String(body.geheimnis || ""), env.PORTAL_SECRET))) { bremseFehlschlag(bremse); throw new F(403, "Falsches Portal-Geheimnis."); }
-    return portalPruefen(env, body, true);
+    return portalPruefen(env, { ...body, quelle: c.ip }, true);
   },
 
   // Orga: Code testen, ohne etwas zu speichern.
@@ -1518,10 +1519,12 @@ async function portalPruefen(env, body, speichern) {
   const jetzt = Date.now();
   if (speichern && !mac && !body.ohneMac) throw new F(400, "MAC-Adresse fehlt oder ist ungültig.");
 
-  // Bremse: höchstens 10 Fehlversuche je Gerät (bzw. ohne MAC: je Nutzername) in 10 Minuten.
+  // Bremse: höchstens 10 Fehlversuche je Gerät (ohne MAC: je Nutzername UND Absender) in 10 Minuten.
+  // Der Absender zählt mit, damit niemand von außen per Fehlversuchen einen Gast am Hallen-Portal aussperrt.
+  const quelle = String(body.quelle || "").slice(0, 64);
   const fehl = mac
     ? await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, jetzt - 10 * 60e3)
-    : await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), jetzt - 10 * 60e3);
+    : await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND quelle = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), quelle, jetzt - 10 * 60e3);
   if (nutzer && fehl.n >= 10) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
 
   const t = !nutzer ? null : await eins(env, `SELECT t.*, u.nick, u.gesperrt, s.label AS sitz_label FROM tickets t
@@ -1542,8 +1545,8 @@ async function portalPruefen(env, body, speichern) {
   }
   const ok = !grund;
   if (speichern) {
-    await los(env, "INSERT INTO netz_logins (at, lan_id, ticket_id, mac, ip, nutzer, ok, grund) VALUES (?,?,?,?,?,?,?,?)",
-      jetzt, lan.id, t ? t.id : null, mac, ip, nutzer, ok ? 1 : 0, grund);
+    await los(env, "INSERT INTO netz_logins (at, lan_id, ticket_id, mac, ip, nutzer, ok, grund, quelle) VALUES (?,?,?,?,?,?,?,?,?)",
+      jetzt, lan.id, t ? t.id : null, mac, ip, nutzer, ok ? 1 : 0, grund, quelle);
     if (ok && !t.freigeschaltet_at) await los(env, "UPDATE tickets SET freigeschaltet_at = ? WHERE id = ?", jetzt, t.id);
     // Datenschutz: alte Geräte-Einträge verfallen von selbst.
     const tage = Math.max(1, Number(e.aufbewahrungTage) || 30);
@@ -1578,7 +1581,7 @@ async function checkOtp(request, env, cors) {
   try {
     if (!env.DB) throw new Error("Datenbank-Binding DB fehlt");
     await bereitmachen(env);
-    const r = await portalPruefen(env, { nutzer: username, code: otp, mac: body.mac, ip: body.ip, ohneMac: true }, true);
+    const r = await portalPruefen(env, { nutzer: username, code: otp, mac: body.mac, ip: body.ip, ohneMac: true, quelle: ip }, true);
     if (r.ok) return antwort(200, "Ok");
     if (!e || e.bis < Date.now()) otpFehlschlaege.set(ip, { anzahl: 1, bis: Date.now() + 10 * 60e3 });
     else e.anzahl++;

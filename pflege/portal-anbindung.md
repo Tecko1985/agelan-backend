@@ -26,7 +26,7 @@ Die Antwort kommt immer mit HTTP 200 und JSON. Der eigentliche Status steht im B
 |---|---|
 | `{"status": "200", "message": "Ok"}` | freischalten |
 | `{"status": "403", "message": "Nutzername oder Code falsch."}` | falscher Code, unbekannter Nick, nicht eingecheckt, gesperrt, zu viele Geräte (Text passt jeweils) |
-| `{"status": "429", "message": "…"}` | zu viele Fehlversuche (je Nick 10, je Absender-IP 100 in 10 Minuten) |
+| `{"status": "429", "message": "…"}` | zu viele Fehlversuche (je Nick und Absender 10, je Absender-IP 300 in 10 Minuten – wer von außen probiert, sperrt nur sich selbst) |
 | `{"status": "400", "message": "…"}` | kein JSON bzw. `username`/`otp` fehlen |
 | `{"status": "405", "message": "Nur POST"}` | falsche Methode |
 
