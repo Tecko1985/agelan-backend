@@ -1,12 +1,13 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api } from "./api.js?v=9";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=9";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=9";
+import { api, istDemo } from "./api.js?v=10";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=10";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=10";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
   ["gaeste", "Gäste & Zahlungen", false],
   ["gruppen", "Reservierungsgruppen", false],
+  ["netz", "Internet & Geräte", false],
   ["-", "Veranstalter"],
   ["plan", "Sitzplan-Editor", true],
   ["tickettypen", "Ticketsorten", true],
@@ -63,7 +64,7 @@ async function zeigen(box) {
   if (planModul) planModul.schliessen();
   box.innerHTML = `<div class="lade">Lädt …</div>`;
   try {
-    await ({ uebersicht, gaeste, gruppen, plan, tickettypen, gutscheine, news, lans, einstellungen, benutzer, protokoll }[reiter] || uebersicht)(box);
+    await ({ uebersicht, gaeste, gruppen, netz, plan, tickettypen, gutscheine, news, lans, einstellungen, benutzer, protokoll }[reiter] || uebersicht)(box);
   } catch (e) { box.innerHTML = `<div class="leer">${esc(e.message)}</div>`; }
 }
 
@@ -180,7 +181,8 @@ async function ticketDetails(t, fertig) {
       <dt>Status</dt><dd>${statusAbzeichen(t)} ${t.bezahltVon ? `<span class="klein leise">bestätigt von ${esc(t.bezahltVon)}</span>` : ""}</dd>
       <dt>Bestellt</dt><dd>${esc(zeit(t.createdAt))}</dd><dt>Gruppe</dt><dd>${esc(t.gruppe || "–")}</dd>
       ${t.notiz ? `<dt>Hinweis Gast</dt><dd>${esc(t.notiz)}</dd>` : ""}<dt>OTP</dt><dd class="mono">${esc(t.otp || "–")}</dd>
-      <dt>Code</dt><dd class="mono klein">${esc(t.code)}</dd></dl>
+      <dt>Code</dt><dd class="mono klein">${esc(t.code)}</dd>
+      <dt>Geräte</dt><dd id="a-geraete" class="klein leise">${t.checkinAt ? "Lädt …" : "–"}</dd></dl>
     <form class="formular" data-form>
       ${t.status !== "storniert" ? `<div class="zwei"><label class="feld"><span>Zahlung</span><select name="bezahlt"><option value="0" ${t.status === "offen" ? "selected" : ""}>offen</option><option value="1" ${t.status === "bezahlt" ? "selected" : ""}>bezahlt</option></select></label>
         <label class="feld"><span>Zahlart</span><select name="zahlart">${Object.entries(ZAHLARTEN).map(([k, l]) => `<option value="${k}" ${k === t.zahlart ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>` : ""}
@@ -195,6 +197,17 @@ async function ticketDetails(t, fertig) {
         ${admin && t.checkinAt ? `<button type="button" class="knopf" data-checkout>Check-in zurücknehmen</button>` : ""}
         ${admin && t.status !== "storniert" ? `<button type="button" class="knopf rot" data-storno>Stornieren</button>` : ""}</div>
     </form></div>`, { breit: true });
+  if (t.checkinAt) {
+    api("adminNetz", { lanId: t.lanId, ticketId: t.id }).then((r) => {
+      const ziel = $("#a-geraete", m.el);
+      if (!ziel) return;
+      const geraete = geraeteAus(r.eintraege.filter((e) => e.ok));
+      const fehl = r.eintraege.filter((e) => !e.ok).length;
+      ziel.classList.remove("leise");
+      ziel.innerHTML = (geraete.length ? geraete.map((g) => `<div><span class="mono">${esc(g.mac)}</span> · ${esc(g.ip || "–")} <span class="leise">· zuletzt ${esc(zeit(g.at))}</span></div>`).join("")
+        : `<span class="leise">${t.freigeschaltetAt ? "" : "Noch nicht am Portal angemeldet."}</span>`) + (fehl ? `<div class="rot">${fehl} Fehlversuch${fehl === 1 ? "" : "e"}</div>` : "");
+    }).catch(() => { const ziel = $("#a-geraete", m.el); if (ziel) ziel.textContent = "–"; });
+  }
   const f = $("[data-form]", m.el);
   const aktion = (knopf, fn) => mitSperre(knopf, async () => { const r = await fn(); if (r && r.ticket) { m.schliessen(); fertig(r.ticket); } });
   f.onsubmit = (e) => {
@@ -234,7 +247,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=9");
+    const { ticketHtml } = await import("./konto.js?v=10");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -283,9 +296,73 @@ async function gruppen(box) {
 }
 
 // ---------------------------------------------------------------------------
+// Geräte je MAC zusammenfassen (neueste Anmeldung gewinnt).
+function geraeteAus(eintraege) {
+  const je = new Map();
+  for (const e of eintraege) if (!je.has(e.mac)) je.set(e.mac, e);
+  return [...je.values()];
+}
+
+async function netz(box) {
+  box.innerHTML = kopf("Internet & Geräte", `<button class="knopf klein" data-neu>Aktualisieren</button>`) + `
+    <p class="klein leise" id="n-stand" style="margin-top:-6px"></p>
+    <div class="karte" style="margin-bottom:14px"><h3>Code testen</h3>
+      <p class="klein leise" style="margin:0 0 10px">Prüft wie das Portal, ob Nutzername und Code passen. Es wird nichts gespeichert.</p>
+      <form class="zeile" data-test style="align-items:flex-end">
+        <label class="feld" style="flex:1;min-width:140px"><span>Nutzername</span><input name="nutzer" autocomplete="off"></label>
+        <label class="feld" style="flex:1;min-width:110px"><span>Code</span><input name="code" autocomplete="off" class="mono"></label>
+        ${istDemo ? `<label class="feld" style="flex:1;min-width:160px"><span>MAC (nur Demo)</span><input name="mac" placeholder="aa:bb:cc:dd:ee:ff" class="mono"></label>` : ""}
+        <button class="knopf">Testen</button>${istDemo ? `<button type="button" class="knopf" data-simulieren title="Wie ein echter Portal-Login, wird gespeichert">Anmeldung simulieren</button>` : ""}
+      </form><div id="n-test" class="klein" style="margin-top:8px"></div></div>
+    <div class="filter">
+      <input data-q placeholder="Suche: MAC, IP, Nick oder Platz">
+      <label class="check klein"><input type="checkbox" data-fehler> nur Fehlversuche</label>
+    </div>
+    <div class="tabelle-wrap"><table><thead><tr><th>Wann</th><th>Ergebnis</th><th>Gast</th><th>MAC</th><th>IP</th></tr></thead><tbody id="n-liste"><tr><td colspan="5" class="leise">Lädt …</td></tr></tbody></table></div>
+    ${istAdmin() ? `<div class="zeile" style="margin-top:14px"><button class="knopf klein rot" data-leeren>Alle Einträge dieser LAN löschen</button></div>` : ""}`;
+  let lauf = 0;
+  const laden = async () => {
+    const nr = ++lauf;
+    const r = await api("adminNetz", { lanId, q: $("[data-q]", box).value.trim(), nurFehler: $("[data-fehler]", box).checked });
+    if (nr !== lauf || !box.isConnected) return;
+    $("#n-stand", box).innerHTML = (r.eingerichtet ? "" : `<span class="gold">Portal-Anbindung noch nicht eingerichtet (Secret PORTAL_SECRET fehlt). </span>`)
+      + `${r.geraete} Geräte von ${r.tickets} Gästen angemeldet. Einträge verfallen automatisch (Einstellungen → Internet-Zugang).`;
+    $("#n-liste", box).innerHTML = r.eintraege.map((e) => `<tr>
+      <td class="klein leise" style="white-space:nowrap">${esc(zeit(e.at))}</td>
+      <td>${e.ok ? `<span class="abzeichen gruen">ok</span>` : `<span class="abzeichen rot">${esc(e.grund || "abgelehnt")}</span>`}</td>
+      <td>${e.nick ? `<b>${esc(e.nick)}</b>${e.platz ? ` <span class="abzeichen gold">${esc(e.platz)}</span>` : ""}` : `<span class="leise">${esc(e.nutzer || "–")}</span>`}</td>
+      <td class="mono klein"><a href="#" data-mac="${esc(e.mac)}">${esc(e.mac)}</a></td><td class="mono klein">${esc(e.ip || "–")}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="leise">Keine Einträge.</td></tr>`;
+    $$("[data-mac]", box).forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); $("[data-q]", box).value = a.dataset.mac; laden().catch(fehler); }));
+  };
+  let warte = null;
+  $("[data-q]", box).oninput = () => { clearTimeout(warte); warte = setTimeout(() => laden().catch(fehler), 300); };
+  $("[data-fehler]", box).onchange = () => laden().catch(fehler);
+  $("[data-neu]", box).onclick = (ev) => mitSperre(ev.currentTarget, laden);
+  const tf = $("[data-test]", box);
+  const ergebnis = (r) => {
+    $("#n-test", box).innerHTML = r.ok ? `<span class="abzeichen gruen">würde freigeschaltet</span> ${esc(r.nick)}${r.platz ? " · Platz " + esc(r.platz) : ""}`
+      : `<span class="abzeichen rot">abgelehnt</span> ${esc(r.grund || "")} <span class="leise">– Gast sieht: „${esc(r.meldung)}“</span>`;
+  };
+  tf.onsubmit = (ev) => { ev.preventDefault(); mitSperre($("button", tf), async () => ergebnis(await api("adminPortalTest", formDaten(tf)))); };
+  const sim = $("[data-simulieren]", box);
+  if (sim) sim.onclick = () => mitSperre(sim, async () => {
+    const v = formDaten(tf);
+    ergebnis(await api("portalAnmeldung", { ...v, ip: "10.95.41." + (2 + Math.floor(Math.random() * 250)), geheimnis: "demo-portal" }));
+    await laden();
+  });
+  const leeren = $("[data-leeren]", box);
+  if (leeren) leeren.onclick = async () => {
+    if (!(await bestaetigen("Alle Geräte-Einträge dieser LAN löschen? Das geht nicht rückgängig.", { ja: "Löschen", gefahr: true }))) return;
+    mitSperre(leeren, async () => { const r = await api("adminNetzLeeren", { lanId }); toast(r.geloescht + " Einträge gelöscht.", "ok"); await laden(); });
+  };
+  await laden();
+}
+
+// ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=9");
+  planModul = await import("./planeditor.js?v=10");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -432,11 +509,13 @@ async function einstellungen(box) {
       <label class="feld"><span>Hinweis für Gäste</span><textarea name="hinweis">${esc(z.hinweis)}</textarea></label>
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="netz"><h3>Internet-Zugang</h3>
-      <p class="klein leise" style="margin:0">Steht nach dem Check-in auf dem Handy des Gastes. Das Passwort ist der Einmal-Code (OTP), der beim Check-in erzeugt wird.</p>
+      <p class="klein leise" style="margin:0">Steht nach dem Check-in auf dem Handy des Gastes. Das Passwort ist der 5-stellige Code, der beim Check-in erzeugt wird. Das Hallen-Portal prüft ihn bei uns und meldet das Gerät (MAC/IP) zurück.</p>
       <div class="zwei"><label class="feld"><span>WLAN-Name (SSID)</span><input name="ssid" value="${esc(e.netz.ssid)}"></label><label class="feld"><span>WLAN-Passwort (leer = keins)</span><input name="wlanPasswort" value="${esc(e.netz.wlanPasswort)}"></label></div>
       <div class="zwei"><label class="feld"><span>Portal-Adresse (optional)</span><input name="portal" value="${esc(e.netz.portal)}" placeholder="http://login.lan"></label>
         <label class="feld"><span>Benutzername ist …</span><select name="benutzer"><option value="nick" ${e.netz.benutzer !== "code" ? "selected" : ""}>der Nickname</option><option value="code" ${e.netz.benutzer === "code" ? "selected" : ""}>die ersten 8 Zeichen des Ticket-Codes</option></select></label></div>
       <label class="feld"><span>Hinweis für Gäste</span><input name="hinweis" value="${esc(e.netz.hinweis)}"></label>
+      <div class="zwei"><label class="feld"><span>Max. Geräte je Code (0 = unbegrenzt)</span><input name="maxGeraete" type="number" min="0" max="20" value="${e.netz.maxGeraete ?? 3}"></label>
+        <label class="feld"><span>Geräte-Einträge löschen nach (Tagen)</span><input name="aufbewahrungTage" type="number" min="1" max="365" value="${e.netz.aufbewahrungTage ?? 30}"></label></div>
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="optionen"><h3>Optionen</h3>
       <label class="check"><input type="checkbox" name="gaesteOeffentlich" ${e.gaesteOeffentlich ? "checked" : ""}> Gästeliste und Namen im Sitzplan öffentlich</label>
@@ -460,7 +539,7 @@ async function einstellungen(box) {
   const sammeln = {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
     zahlung: (v) => [["zahlung", { arten: { paypal: v.a_paypal, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: v.paypal, paypalMe: v.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
-    netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis }]],
+    netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
     optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen], ["gruppeHalteTage", Math.max(1, Number(v.gruppeHalteTage) || 21)], ["gruppeMaxSitze", Math.max(1, Number(v.gruppeMaxSitze) || 10)]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],
     faq: (v) => [["faq", v.t.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [f, ...a] = b.split("\n"); return { f: f.trim(), a: a.join("\n").trim() }; })]],

@@ -12,6 +12,9 @@
 //                            Veranstalter macht (Konto → „Veranstalter werden“).
 //   ORIGINS       (Var)    = erlaubte Browser-Herkünfte, kommagetrennt,
 //                            z. B. "https://age-lan.de,https://tecko1985.github.io"
+//   PORTAL_SECRET (Secret) = gemeinsames Geheimnis mit dem Anmeldeportal der
+//                            Halle (portal.lan). Ohne Secret ist die Aktion
+//                            portalAnmeldung gesperrt. Siehe pflege/portal-anbindung.md.
 //
 // Der Demo-Modus der Website (demo.js) lädt GENAU diese Datei im Browser und
 // hängt sie an eine SQLite-Datenbank im Browser (sql.js). Deshalb: nur
@@ -90,6 +93,13 @@ const SCHEMA = [
     teaser TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '',
     datum TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // Anmeldungen am Hallen-Portal: welches Gerät (MAC/IP) mit welchem Ticket online ging.
+  `CREATE TABLE IF NOT EXISTS netz_logins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, lan_id INTEGER,
+    ticket_id INTEGER, mac TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '',
+    nutzer TEXT NOT NULL DEFAULT '', ok INTEGER NOT NULL DEFAULT 0, grund TEXT NOT NULL DEFAULT '')`,
+  `CREATE INDEX IF NOT EXISTS netz_logins_mac ON netz_logins(mac, at)`,
+  `CREATE INDEX IF NOT EXISTS netz_logins_ticket ON netz_logins(ticket_id)`,
   `CREATE TABLE IF NOT EXISTS log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
     user_id INTEGER, aktion TEXT NOT NULL, details TEXT NOT NULL DEFAULT '')`,
@@ -134,7 +144,7 @@ const STANDARD = {
   ],
   texte: { anfahrt: "", impressum: "", datenschutz: "", agb: "" },
   // Internet-Zugang: steht nach dem Check-in auf dem Handy des Gastes (Ticket-QR bzw. Konto).
-  netz: { ssid: "", wlanPasswort: "", portal: "", benutzer: "nick", hinweis: "Verbinde dich mit dem Netz und melde dich im Portal mit diesen Daten an." },
+  netz: { ssid: "", wlanPasswort: "", portal: "", benutzer: "nick", hinweis: "Verbinde dich mit dem Netz und melde dich im Portal mit diesen Daten an.", maxGeraete: 3, aufbewahrungTage: 30 },
   sponsoren: [],
   gaesteOeffentlich: true,
   sitzwahlOffen: true,
@@ -1268,7 +1278,11 @@ const AKTIONEN = {
     // Links nur als http(s)/mailto speichern – kein javascript: o. Ä.
     if (key === "seite") w.socials = Object.fromEntries(Object.entries(w.socials || {}).map(([k, v]) => [k, sichereUrl(v)]));
     if (key === "zahlung") { w.paypalMe = sichereUrl(w.paypalMe); w.arten = { ...std.arten, ...(w.arten || {}) }; }
-    if (key === "netz") w.portal = sichereUrl(w.portal);
+    if (key === "netz") {
+      w.portal = sichereUrl(w.portal);
+      w.maxGeraete = Math.max(0, Math.min(20, Math.round(Number(w.maxGeraete)) || 0));
+      w.aufbewahrungTage = Math.max(1, Math.min(365, Math.round(Number(w.aufbewahrungTage)) || 30));
+    }
     if (key === "sponsoren") w = (Array.isArray(w) ? w : []).map((s) => ({ ...s, url: sichereUrl(s && s.url), logo: sichereUrl(s && s.logo) }));
     const wert = JSON.stringify(w);
     if (wert.length > 100000) throw new F(400, "Zu groß.");
@@ -1310,6 +1324,52 @@ const AKTIONEN = {
     return { ok: true, neuesPasswort };
   },
 
+  // ---------- Hallen-Portal ----------
+  // Aufruf vom Portal-Server (PHP) – ohne Konto, mit PORTAL_SECRET.
+  async portalAnmeldung(c) {
+    const { env, body } = c;
+    if (!env.PORTAL_SECRET) throw new F(503, "Portal-Anbindung ist nicht eingerichtet (Secret PORTAL_SECRET fehlt).");
+    const bremse = "portal:" + c.ip;
+    if (!bremseOffen(bremse)) throw new F(429, "Zu viele Fehlversuche.");
+    if (!(await gleich(String(body.geheimnis || ""), env.PORTAL_SECRET))) { bremseFehlschlag(bremse); throw new F(403, "Falsches Portal-Geheimnis."); }
+    return portalPruefen(env, body, true);
+  },
+
+  // Orga: Code testen, ohne etwas zu speichern.
+  async adminPortalTest(c) {
+    brauchtOrga(c);
+    return portalPruefen(c.env, c.body, false);
+  },
+
+  // Orga: Geräte-Anmeldungen ansehen und durchsuchen (MAC, IP, Nick, Platz).
+  async adminNetz(c) {
+    brauchtOrga(c);
+    const { env, body } = c;
+    const lan = await lanAusBody(c);
+    const wo = ["n.lan_id = ?"], p = [lan.id];
+    if (body.ticketId) { wo.push("n.ticket_id = ?"); p.push(Number(body.ticketId)); }
+    const q = String(body.q || "").trim().toLowerCase().slice(0, 64);
+    if (q) {
+      const mac = macNorm(q);
+      wo.push("(n.mac LIKE ? OR n.ip LIKE ? OR lower(n.nutzer) LIKE ? OR lower(u.nick) LIKE ? OR lower(s.label) = ?)");
+      p.push(mac || "%" + q + "%", q + "%", "%" + q + "%", "%" + q + "%", q);
+    }
+    if (body.nurFehler) wo.push("n.ok = 0");
+    const zeilen = await alle(env, `SELECT n.*, u.nick, s.label AS sitz_label FROM netz_logins n
+      LEFT JOIN tickets t ON t.id = n.ticket_id LEFT JOIN users u ON u.id = t.user_id LEFT JOIN seats s ON s.id = t.seat_id
+      WHERE ${wo.join(" AND ")} ORDER BY n.id DESC LIMIT 500`, ...p);
+    const z = await eins(env, "SELECT COUNT(DISTINCT mac) AS geraete, COUNT(DISTINCT ticket_id) AS tickets FROM netz_logins WHERE lan_id = ? AND ok = 1", lan.id);
+    return { eintraege: zeilen.map(netzZeile), geraete: z.geraete, tickets: z.tickets, eingerichtet: !!env.PORTAL_SECRET };
+  },
+
+  async adminNetzLeeren(c) {
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const r = await los(c.env, "DELETE FROM netz_logins WHERE lan_id = ?", lan.id);
+    await protokoll(c, "netz-geleert", { lan: lan.id, anzahl: geaendert(r) });
+    return { geloescht: geaendert(r) };
+  },
+
   async adminProtokoll(c) {
     brauchtAdmin(c);
     const zeilen = await alle(c.env, "SELECT l.*, u.nick FROM log l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.id DESC LIMIT 300");
@@ -1325,7 +1385,70 @@ function lanAus(l) {
 }
 
 function otpErzeugen() {
-  return zufallsCode(6);
+  return zufallsCode(5);
+}
+
+// ---------------------------------------------------------------------------
+// Hallen-Portal: prüft Nutzername + Code und merkt sich das Gerät.
+// ---------------------------------------------------------------------------
+function macNorm(v) {
+  const roh = String(v || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+  return roh.length === 12 ? roh.match(/../g).join(":") : "";
+}
+function ipNorm(v) {
+  const s = String(v || "").trim();
+  return /^[0-9a-fA-F:.]{2,45}$/.test(s) ? s : "";
+}
+
+async function portalPruefen(env, body, speichern) {
+  const e = (await einstellungen(env)).netz;
+  const lan = await aktiveLan(env);
+  const nutzer = String(body.nutzer || "").trim().slice(0, 64);
+  const code = String(body.code || "").toUpperCase().replace(/\s+/g, "").slice(0, 32);
+  const mac = macNorm(body.mac);
+  const ip = ipNorm(body.ip);
+  const jetzt = Date.now();
+  if (speichern && !mac) throw new F(400, "MAC-Adresse fehlt oder ist ungültig.");
+
+  // Bremse: höchstens 10 Fehlversuche je Gerät in 10 Minuten.
+  if (mac) {
+    const fehl = await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, jetzt - 10 * 60e3);
+    if (fehl.n >= 10) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
+  }
+
+  const t = !nutzer ? null : await eins(env, `SELECT t.*, u.nick, u.gesperrt, s.label AS sitz_label FROM tickets t
+      JOIN users u ON u.id = t.user_id LEFT JOIN seats s ON s.id = t.seat_id
+      WHERE t.lan_id = ? AND t.status != 'storniert' AND ${e.benutzer === "code" ? "substr(t.code, 1, 8) = ?" : "u.nick_key = ?"}
+      LIMIT 1`, lan.id, nutzer.toLowerCase());
+  let grund = "", meldung = "";
+  if (!t) { grund = "unbekannter Nutzer"; meldung = "Nutzername oder Code falsch."; }
+  else if (!t.otp || !(await gleich(t.otp, code))) { grund = "falscher Code"; meldung = "Nutzername oder Code falsch."; }
+  else if (!t.checkin_at) { grund = "nicht eingecheckt"; meldung = "Du bist noch nicht eingecheckt."; }
+  else if (t.gesperrt) { grund = "Konto gesperrt"; meldung = "Dein Konto ist gesperrt. Bitte melde dich bei der Orga."; }
+  else if (mac) {
+    const geraete = await alle(env, "SELECT DISTINCT mac FROM netz_logins WHERE ticket_id = ? AND ok = 1", t.id);
+    const max = e.maxGeraete == null ? 3 : Number(e.maxGeraete) || 0; // 0 = unbegrenzt
+    if (max > 0 && !geraete.some((g) => g.mac === mac) && geraete.length >= max) {
+      grund = "zu viele Geräte"; meldung = `Mit deinem Code sind schon ${geraete.length} Geräte angemeldet. Bitte melde dich bei der Orga.`;
+    }
+  }
+  const ok = !grund;
+  if (speichern) {
+    await los(env, "INSERT INTO netz_logins (at, lan_id, ticket_id, mac, ip, nutzer, ok, grund) VALUES (?,?,?,?,?,?,?,?)",
+      jetzt, lan.id, t ? t.id : null, mac, ip, nutzer, ok ? 1 : 0, grund);
+    if (ok && !t.freigeschaltet_at) await los(env, "UPDATE tickets SET freigeschaltet_at = ? WHERE id = ?", jetzt, t.id);
+    // Datenschutz: alte Geräte-Einträge verfallen von selbst.
+    const tage = Math.max(1, Number(e.aufbewahrungTage) || 30);
+    await los(env, "DELETE FROM netz_logins WHERE at < ?", jetzt - tage * 864e5);
+  }
+  return ok
+    ? { ok: true, nick: t.nick, platz: t.sitz_label || "", ticketId: t.id }
+    : { ok: false, meldung, grund };
+}
+
+function netzZeile(z) {
+  return { id: z.id, at: z.at, mac: z.mac, ip: z.ip, nutzer: z.nutzer, ok: !!z.ok, grund: z.grund,
+    ticketId: z.ticket_id, nick: z.nick || "", platz: z.sitz_label || "" };
 }
 
 // "AGELAN:<hex>", ".../#/t/<hex>", "fccf / ac6e / …" oder nackter Code -> 32 hex
