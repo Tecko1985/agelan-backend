@@ -1,7 +1,8 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=15";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=15";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=15";
+import { api, istDemo } from "./api.js?v=17";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=17";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=17";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=17";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -187,7 +188,9 @@ async function ticketDetails(t, fertig) {
       ${t.status !== "storniert" ? `<div class="zwei"><label class="feld"><span>Zahlung</span><select name="bezahlt"><option value="0" ${t.status === "offen" ? "selected" : ""}>offen</option><option value="1" ${t.status === "bezahlt" ? "selected" : ""}>bezahlt</option></select></label>
         <label class="feld"><span>Zahlart</span><select name="zahlart">${Object.entries(ZAHLARTEN).map(([k, l]) => `<option value="${k}" ${k === t.zahlart ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>` : ""}
       ${admin && t.status !== "storniert" ? `<div class="zwei"><label class="feld"><span>Ticketsorte</span><select name="typId">${typen.map((x) => `<option value="${x.id}" ${x.id === t.typ.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
-        <label class="feld"><span>Platz (Name, leer = keiner)</span><input name="sitz" value="${esc(t.sitz)}"></label></div>
+        <label class="feld"><span>Platz</span><div class="zeile" style="gap:8px;flex-wrap:nowrap">
+          <input name="sitz" value="${esc(t.sitz)}" readonly placeholder="kein Platz" style="cursor:pointer" data-sitzwahl title="Im Sitzplan wählen">
+          <button type="button" class="knopf" data-sitzwahl>Sitzplan</button></div></label></div>
         <label class="feld"><span>Preis (€)</span><input name="preis" type="number" step="0.01" min="0" value="${(t.preisCent / 100).toFixed(2)}"></label>` : ""}
       <label class="feld"><span>Orga-Notiz</span><input name="orgaNotiz" value="${esc(t.orgaNotiz)}"></label>
       <div class="fehler-text"></div>
@@ -209,6 +212,7 @@ async function ticketDetails(t, fertig) {
     }).catch(() => { const ziel = $("#a-geraete", m.el); if (ziel) ziel.textContent = "–"; });
   }
   const f = $("[data-form]", m.el);
+  $$("[data-sitzwahl]", f).forEach((x) => (x.onclick = (e) => { e.preventDefault(); mitSperre($("button[data-sitzwahl]", f), () => platzWaehlen(t, f.sitz)); }));
   const aktion = (knopf, fn) => mitSperre(knopf, async () => { const r = await fn(); if (r && r.ticket) { m.schliessen(); fertig(r.ticket); } });
   f.onsubmit = (e) => {
     e.preventDefault();
@@ -247,7 +251,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=15");
+    const { ticketHtml } = await import("./konto.js?v=17");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -362,7 +366,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=15");
+  planModul = await import("./planeditor.js?v=17");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -492,6 +496,53 @@ async function lans(box) {
 }
 
 // ---------------------------------------------------------------------------
+// Platz für ein Ticket im Sitzplan auswählen. Frei, von einer Gruppe vorgemerkt
+// oder gesperrt darf die Orga vergeben; Plätze anderer Gäste nicht.
+// Übernimmt nur ins Formular – gespeichert wird mit „Speichern“ im Ticket-Dialog.
+async function platzWaehlen(t, feld) {
+  const daten = await api("sitzplan", { lanId: t.lanId });
+  const sitze = daten.sitze.map((s) => ({ ...s, meins: false, meineGruppe: false }));
+  const waehlbar = (s) => s.id === t.sitzId || ["frei", "gruppe", "gesperrt"].includes(s.status);
+  let gewaehlt = sitze.find((s) => s.label.toLowerCase() === feld.value.trim().toLowerCase()) || null;
+  const m = modal("Platz für " + t.nutzer.nick, `<div class="stapel">
+    <div class="zeile zwischen" style="align-items:center"><div class="klein" id="pw-info"></div>
+      <div class="zeile" style="gap:6px"><button class="knopf klein" data-z="-1" title="Verkleinern">−</button><button class="knopf klein" data-z="1" title="Vergrößern">+</button></div></div>
+    <div class="plan-buehne" id="pw-buehne" style="max-height:62vh;max-height:62dvh"></div>
+    <details><summary class="klein leise" style="cursor:pointer">Legende</summary>${legendeHtml()}</details>
+    <div class="zeile"><button class="knopf primaer" data-ok>Platz übernehmen</button><button class="knopf" data-kein>Kein Platz</button><button class="knopf geist" data-ab>Abbrechen</button></div></div>`, { breit: true });
+  const buehne = $("#pw-buehne", m.el);
+  const info = $("#pw-info", m.el);
+  let zoom = Math.min(1.4, Math.max(0.45, (buehne.clientWidth - 30) / (daten.plan.breite * U + 12)));
+  const zeichnen = () => {
+    buehne.innerHTML = planSvg(daten.plan, sitze, {
+      zoom,
+      klassen: (s, istDeko) => (istDeko ? "" : [s.id === t.sitzId ? "markiert" : "", gewaehlt && s.id === gewaehlt.id ? "gewaehlt" : ""].join(" ")),
+    });
+    const frei = sitze.filter((s) => s.status === "frei").length;
+    info.innerHTML = gewaehlt && gewaehlt.id !== t.sitzId
+      ? `Gewählt: ${sitzInfo(gewaehlt)}${gewaehlt.status === "gruppe" ? ` <span class="gold">– der Gruppe wird der Platz damit genommen</span>` : ""}${gewaehlt.status === "gesperrt" ? ` <span class="gold">– Platz ist gesperrt</span>` : ""}`
+      : `Aktuell: <b>${esc(t.sitz || "kein Platz")}</b> · ${frei} Plätze frei. Klicke einen freien Platz an.`;
+  };
+  buehne.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-sitz]");
+    if (!g) return;
+    const s = sitze.find((x) => x.id === g.dataset.sitz);
+    if (!s) return;
+    if (!waehlbar(s)) { toast(`Platz ${s.label} ist schon vergeben${s.nick ? " an " + s.nick : ""}.`); return; }
+    gewaehlt = s;
+    zeichnen();
+  });
+  tooltipAnbinden(buehne, (id) => sitze.find((x) => x.id === id));
+  $$("[data-z]", m.el).forEach((b) => (b.onclick = () => { zoom = Math.min(2.5, Math.max(0.4, zoom + Number(b.dataset.z) * 0.2)); zeichnen(); }));
+  const setzen = (wert) => { feld.value = wert; feld.dispatchEvent(new Event("input", { bubbles: true })); m.schliessen(); };
+  $("[data-ok]", m.el).onclick = () => { if (!gewaehlt) { toast("Bitte erst einen Platz anklicken."); return; } setzen(gewaehlt.label); };
+  $("[data-kein]", m.el).onclick = () => setzen("");
+  $("[data-ab]", m.el).onclick = () => m.schliessen();
+  zeichnen();
+  const ziel = $(".gewaehlt, .markiert", buehne);
+  if (ziel) ziel.scrollIntoView({ block: "center", inline: "center" });
+}
+
 async function einstellungen(box) {
   const { einstellungen: e } = await api("adminEinstellungen");
   const s = e.seite, z = e.zahlung;
