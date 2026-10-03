@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=30";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=30";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=30";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=30";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=30";
+import { api, istDemo } from "./api.js?v=32";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=32";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=32";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=32";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=32";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=30");
+    const { ticketHtml } = await import("./konto.js?v=32");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=30");
+  planModul = await import("./planeditor.js?v=32");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -425,11 +425,12 @@ async function tickettypen(box) {
     ${ts.map((t) => `<tr><td class="leise">${t.sort}</td><td><b>${esc(t.name)}</b>${t.extras.length ? `<div class="klein leise">+ ${t.extras.map((x) => esc(x.name)).join(", ")}</div>` : ""}</td><td class="zahl">${euro(t.preisCent)}</td>
       <td>${t.mitSitz ? "✓" : "–"}</td><td>${t.aktiv ? "✓" : "–"}</td><td>${t.kaufbar ? "✓" : "–"}</td><td class="zahl">${t.verkauft} / ${t.limit || "∞"}</td>
       <td class="klein">${t.von ? datum(t.von) : ""}${t.von || t.bis ? " – " : ""}${t.bis ? datum(t.bis) : ""}</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}">Löschen</button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-bearbeiten="${t.id}">Bearbeiten</button> <button class="knopf klein" data-kopieren-typ="${t.id}" title="Als neue Sorte übernehmen, z. B. für die nächste Preisstufe">Kopieren</button>${t.verkauft ? "" : ` <button class="knopf klein geist" data-loeschen="${t.id}">Löschen</button>`}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="klein leise" style="margin-top:8px">„Aktiv“ = auf der Website sichtbar, „Kaufbar“ = kann bestellt werden. Nicht kaufbare Sorten (z. B. Orga/Free) vergibst du unter Benutzer → Ticket anlegen.</p>`;
   const bearbeiten = (t = { sort: ts.length + 1, name: "", beschreibung: "", features: [], preisCent: 0, extras: [], mitSitz: true, aktiv: true, kaufbar: true, limit: 0, von: "", bis: "" }) => {
-    const m = modal(t.id ? "Ticketsorte bearbeiten" : "Neue Ticketsorte", `<form class="formular">
+    const m = modal(t.id ? "Ticketsorte bearbeiten" : t.kopieVon ? "Ticketsorte kopieren" : "Neue Ticketsorte", `<form class="formular">
+      ${t.kopieVon ? `<p class="klein leise" style="margin:0">Kopie von „${esc(t.kopieVon)}“. Wird erst mit „Speichern“ als neue Sorte angelegt – Preis und Zeitraum anpassen.</p>` : ""}
       <div class="zwei"><label class="feld"><span>Name</span><input name="name" value="${esc(t.name)}" required></label><label class="feld"><span>Sortierung</span><input name="sort" type="number" value="${t.sort}"></label></div>
       <label class="feld"><span>Beschreibung</span><input name="beschreibung" value="${esc(t.beschreibung)}"></label>
       <label class="feld"><span>Enthaltene Leistungen (eine pro Zeile)</span><textarea name="features">${esc(t.features.join("\n"))}</textarea></label>
@@ -453,6 +454,13 @@ async function tickettypen(box) {
   };
   $("[data-neu]", box).onclick = () => bearbeiten();
   $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => bearbeiten(ts.find((t) => t.id === Number(b.dataset.bearbeiten)))));
+  // Kopie für die nächste Preisstufe: alles übernehmen, neue Sortierung, „ab“ = Tag nach dem bisherigen Ende.
+  $$("[data-kopieren-typ]", box).forEach((b) => (b.onclick = () => {
+    const q = ts.find((t) => t.id === Number(b.dataset.kopierenTyp));
+    const naechsterTag = (iso) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+    bearbeiten({ ...q, id: undefined, kopieVon: q.name, sort: Math.max(0, ...ts.map((t) => t.sort)) + 1,
+      features: [...q.features], extras: q.extras.map((x) => ({ ...x })), von: q.bis ? naechsterTag(q.bis) : q.von, bis: "" });
+  }));
   $$("[data-loeschen]", box).forEach((b) => (b.onclick = async () => {
     if (!(await bestaetigen("Diese Ticketsorte löschen?", { ja: "Löschen", gefahr: true }))) return;
     mitSperre(b, async () => { await api("adminTickettypLoeschen", { lanId, id: Number(b.dataset.loeschen) }); tickettypen(box); });
@@ -774,7 +782,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=30");
+    const { ticketHtml } = await import("./konto.js?v=32");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
