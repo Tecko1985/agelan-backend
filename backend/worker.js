@@ -521,6 +521,12 @@ async function ticketDetail(env, ticketId) {
   const t = await eins(env, TICKET_SQL + " WHERE t.id = ?", ticketId);
   return t ? ticketAus(t) : null;
 }
+// Für den Gast selbst: ohne interne Orga-Felder.
+function gastTicket(t) {
+  if (!t) return t;
+  const { orgaNotiz, bezahltVon, checkinVon, ...rest } = t;
+  return rest;
+}
 function ticketAus(t) {
   return {
     id: t.id, lanId: t.lan_id, code: t.code, status: t.status, zahlart: t.zahlart, zahlartText: ZAHLARTEN[t.zahlart] || t.zahlart,
@@ -686,7 +692,7 @@ const AKTIONEN = {
       LEFT JOIN groups g ON g.id = gm.group_id
       WHERE t.lan_id = ? AND t.status != 'storniert' ORDER BY t.created_at`, lan.id], ...zahlenAbfragen(lan.id));
     const z = zahlenAus(lan, zz);
-    return { oeffentlich: true, zahlen: z, gaeste: zeilen.map((r) => ({ nick: r.nick, sitz: r.sitz || "", gruppe: r.gruppe || "", typ: r.typ, bezahlt: r.status === "bezahlt" })) };
+    return { oeffentlich: true, zahlen: z, gaeste: zeilen.map((r) => ({ nick: r.nick, sitz: r.sitz || "", gruppe: r.gruppe || "", typ: r.typ, ...(istOrga ? { bezahlt: r.status === "bezahlt" } : {}) })) };
   },
 
   // ---------- Konto ----------
@@ -703,8 +709,8 @@ const AKTIONEN = {
       geburtsdatum: datumPruefen(body.geburtsdatum, "Geburtsdatum"), discord: text(body.discord, 60, "Discord", false),
     };
     if (!u.geburtsdatum) throw new F(400, "Geburtsdatum fehlt (wir brauchen es wegen der Altersgrenze).");
-    if (await eins(env, "SELECT id FROM users WHERE nick_key = ?", nick.toLowerCase())) throw new F(409, "Diesen Nickname gibt es schon.");
-    if (await eins(env, "SELECT id FROM users WHERE email_key = ?", email.toLowerCase())) throw new F(409, "Mit dieser E-Mail gibt es schon ein Konto.");
+    if (await eins(env, "SELECT id FROM users WHERE nick_key = ?", nick.toLowerCase())) { bremseFehlschlag(c.ip); throw new F(409, "Diesen Nickname gibt es schon."); }
+    if (await eins(env, "SELECT id FROM users WHERE email_key = ?", email.toLowerCase())) { bremseFehlschlag(c.ip); throw new F(409, "Mit dieser E-Mail gibt es schon ein Konto."); }
     registrierungZaehlen(c.ip);
     const r = await los(env, `INSERT INTO users (nick, nick_key, email, email_key, vorname, nachname, geburtsdatum, discord, pw, created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`, nick, nick.toLowerCase(), email, email.toLowerCase(), u.vorname, u.nachname, u.geburtsdatum, u.discord, await passwortHashen(pw), Date.now());
@@ -739,7 +745,7 @@ const AKTIONEN = {
         JOIN users uv ON uv.id = ue.von_id JOIN users ua ON ua.id = ue.an_id
         WHERE ue.lan_id = ${AKTIVE_LAN} AND (ue.von_id = ? OR ue.an_id = ?) ORDER BY ue.id`, u.id, u.id]);
     if (!lan) throw new F(500, "Keine LAN angelegt.");
-    const ticket = tz ? ticketAus(tz) : null;
+    const ticket = tz ? gastTicket(ticketAus(tz)) : null;
     if (ticket && ticket.checkinAt) ticket.zugang = zugangAus(einstellungenAus(einstZeilen), ticket);
     return {
       nutzer: nutzerOeffentlich(u),
@@ -800,14 +806,15 @@ const AKTIONEN = {
       await protokoll(c, "uebergabe-abgelehnt", { von: u.nick, an: a.an_nick });
       return { ok: true };
     }
-    const t = await eins(env, "SELECT id, checkin_at FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
+    const t = await eins(env, "SELECT id, checkin_at, status, paypal_capture FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
     if (!t) throw new F(409, "Du hast kein Ticket für diese LAN.");
+    if (t.status === "offen" && t.paypal_capture) throw new F(409, "Deine PayPal-Zahlung ist noch in Prüfung – die Übergabe geht erst danach.");
     if (t.checkin_at) throw new F(409, "Dein Ticket ist schon eingecheckt und kann nicht mehr weitergegeben werden.");
     const alter = alterAm(a.an_geb, lan.start || heute());
     if (alter !== null && alter < 16) throw new F(403, a.an_nick + " ist zur LAN jünger als 16 und darf leider nicht teilnehmen.");
     const notiz = "Übergeben von " + u.nick + " an " + a.an_nick + " am " + new Date().toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" });
     // In EINER Anweisung: nur wenn der Empfänger weiterhin kein Ticket hat und noch nicht eingecheckt ist.
-    const r = await los(env, `UPDATE tickets SET user_id = ?, otp = '', freigeschaltet_at = NULL,
+    const r = await los(env, `UPDATE tickets SET user_id = ?, otp = '', freigeschaltet_at = NULL, paypal_order = '',
         orga_notiz = TRIM(COALESCE(orga_notiz, '') || char(10) || ?, char(10) || ' ')
       WHERE id = ? AND user_id = ? AND checkin_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert')`,
@@ -916,7 +923,8 @@ const AKTIONEN = {
     const r = await los(env, `INSERT INTO tickets (lan_id, user_id, type_id, code, status, zahlart, preis_cent, extras, coupon_id, rabatt_cent, notiz, agb_at, created_at, bezahlt_at, bezahlt_von)
       SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       WHERE (? = 0 OR (SELECT COUNT(*) FROM tickets WHERE type_id = ? AND status != 'storniert') < ?)
-        AND (? = 0 OR (SELECT COUNT(*) FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert')
+        AND (? = 0 OR (SELECT COUNT(*) FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id LEFT JOIN seats s ON s.id = t.seat_id
+                       WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert' AND COALESCE(s.gesperrt, 0) = 0)
                       < MIN((SELECT COUNT(*) FROM seats WHERE lan_id = ? AND gesperrt = 0
                                AND stufe <= (SELECT CASE WHEN stufe_auto = 1 THEN 99 ELSE stufe_aktiv END FROM lans WHERE id = ?)), ?))
         AND (? IS NULL OR (SELECT COUNT(*) FROM tickets WHERE coupon_id = ? AND status != 'storniert') < (SELECT max_einloesungen FROM coupons WHERE id = ?))`,
@@ -928,14 +936,17 @@ const AKTIONEN = {
     if (!geaendert(r)) throw new F(409, "Leider ausverkauft – oder der Gutschein ist schon aufgebraucht.");
     await protokoll(c, "ticket-gekauft", { typ: typ.name, zahlart, preis: p.endCent });
     await stufeNachziehen(c, lan.id);
-    return { ticket: await ticketDetail(env, r.meta.last_row_id) };
+    return { ticket: gastTicket(await ticketDetail(env, r.meta.last_row_id)) };
   },
 
   async ticketStornieren(c) {
     const u = brauchtLogin(c);
     const lan = await aktiveLan(c.env);
-    const r = await los(c.env, "UPDATE tickets SET status = 'storniert', seat_id = NULL WHERE user_id = ? AND lan_id = ? AND status = 'offen'", u.id, lan.id);
+    const offen = await eins(c.env, "SELECT paypal_capture FROM tickets WHERE user_id = ? AND lan_id = ? AND status = 'offen'", u.id, lan.id);
+    if (offen && offen.paypal_capture) throw new F(409, "Für dein Ticket ist eine PayPal-Zahlung eingegangen bzw. in Prüfung. Zum Stornieren melde dich bitte bei der Orga.");
+    const r = await los(c.env, "UPDATE tickets SET status = 'storniert', seat_id = NULL WHERE user_id = ? AND lan_id = ? AND status = 'offen' AND paypal_capture = ''", u.id, lan.id);
     if (!geaendert(r)) throw new F(409, "Nur offene (noch nicht bezahlte) Tickets kannst du selbst stornieren.");
+    await los(c.env, "DELETE FROM uebergaben WHERE lan_id = ? AND von_id = ?", lan.id, u.id);
     await protokoll(c, "ticket-storniert", u.nick);
     return { ok: true };
   },
@@ -962,10 +973,22 @@ const AKTIONEN = {
     const u = brauchtLogin(c);
     if (!paypalBereit(env)) throw new F(409, "PayPal ist gerade nicht verfügbar.");
     const lan = await aktiveLan(env);
+    const e = await einstellungen(env);
+    if (!e.zahlung.arten.paypal_direkt) throw new F(409, "Zahlung über PayPal ist gerade nicht freigeschaltet.");
     const t = await eins(env, "SELECT * FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
     if (!t) throw new F(404, "Kein Ticket gefunden.");
     if (t.status === "bezahlt") return { bezahlt: true };
     if (!(t.preis_cent > 0)) throw new F(409, "Für dieses Ticket ist nichts zu zahlen.");
+    if (t.paypal_capture) throw new F(409, "Für dein Ticket ist schon eine PayPal-Zahlung eingegangen bzw. in Prüfung. Die Orga bestätigt dein Ticket.");
+    // Gibt es schon eine bestätigte Bestellung (z. B. Rückkehr von PayPal abgebrochen)? Dann die einziehen statt neu kassieren.
+    if (t.paypal_order) {
+      let alt = null;
+      try { alt = await paypalAnfrage(env, "GET", "/v2/checkout/orders/" + encodeURIComponent(t.paypal_order)); } catch (err) { alt = null; }
+      if (alt && (alt.status === "APPROVED" || alt.status === "COMPLETED")) {
+        await paypalEinziehen(c, t, t.paypal_order);
+        return { bezahlt: true };
+      }
+    }
     // Rücksprung nur auf eine der erlaubten Website-Adressen (ORIGINS)
     const ziel = String(body.zurueck || "");
     let basis;
@@ -1000,32 +1023,9 @@ const AKTIONEN = {
     const t = orderId && await eins(env, "SELECT * FROM tickets WHERE paypal_order = ? AND user_id = ?", orderId, u.id);
     if (!t) throw new F(404, "Zu dieser PayPal-Zahlung gibt es kein Ticket.");
     if (t.status === "bezahlt") return { ticket: await ticketDetail(env, t.id) };
-    if (t.status !== "offen") throw new F(409, "Das Ticket ist storniert. Melde dich bitte bei der Orga, falls Geld abgebucht wurde.");
-    let erg;
-    try {
-      erg = await paypalAnfrage(env, "POST", "/v2/checkout/orders/" + encodeURIComponent(orderId) + "/capture", {}, "capture-" + orderId);
-    } catch (e) {
-      // Schon eingezogen (z. B. Seite doppelt geladen) → Stand abfragen
-      if (!(e instanceof F) || !/ORDER_ALREADY_CAPTURED/.test(e.message)) throw e;
-      erg = await paypalAnfrage(env, "GET", "/v2/checkout/orders/" + encodeURIComponent(orderId));
-    }
-    const einh = (erg.purchase_units || [])[0] || {};
-    const cap = ((einh.payments || {}).captures || [])[0];
-    if (erg.status !== "COMPLETED" || !cap || cap.status !== "COMPLETED") {
-      await protokoll(c, "paypal-nicht-abgeschlossen", { ticket: t.id, status: erg.status, capture: cap && cap.status });
-      throw new F(409, cap && cap.status === "PENDING"
-        ? "PayPal prüft die Zahlung noch. Die Orga bestätigt dein Ticket, sobald das Geld da ist."
-        : "Die Zahlung wurde nicht abgeschlossen. Versuch es bitte nochmal.");
-    }
-    const betrag = Math.round(Number(cap.amount && cap.amount.value) * 100);
-    if (cap.amount.currency_code !== "EUR" || betrag !== t.preis_cent || String(einh.custom_id || cap.custom_id || "") !== String(t.id)) {
-      await protokoll(c, "paypal-betrag-falsch", { ticket: t.id, betrag, soll: t.preis_cent, capture: cap.id });
-      throw new F(409, "Der bezahlte Betrag passt nicht zum Ticket. Die Orga schaut sich das an.");
-    }
-    await los(env, "UPDATE tickets SET status = 'bezahlt', bezahlt_at = ?, bezahlt_von = 'PayPal', zahlart = 'paypal_direkt', paypal_capture = ? WHERE id = ? AND status = 'offen'",
-      Date.now(), String(cap.id), t.id);
-    await protokoll(c, "paypal-bezahlt", { ticket: t.id, betrag, capture: cap.id });
-    return { ticket: await ticketDetail(env, t.id) };
+    if (t.status !== "offen") throw new F(409, "Das Ticket ist storniert – es wurde nichts abgebucht.");
+    await paypalEinziehen(c, t, orderId);
+    return { ticket: gastTicket(await ticketDetail(env, t.id)) };
   },
 
   // ---------- Sitzplatz ----------
@@ -1049,6 +1049,8 @@ const AKTIONEN = {
   async sitzFreigeben(c) {
     const u = brauchtLogin(c);
     const lan = await aktiveLan(c.env);
+    const e = await einstellungen(c.env);
+    if (!e.sitzwahlOffen && u.rolle === "user") throw new F(409, "Die Sitzplatzwahl ist gerade geschlossen.");
     await los(c.env, "UPDATE tickets SET seat_id = NULL WHERE user_id = ? AND lan_id = ? AND status != 'storniert' AND checkin_at IS NULL", u.id, lan.id);
     return { ok: true };
   },
@@ -1088,7 +1090,9 @@ const AKTIONEN = {
     const g = await eins(env, "SELECT * FROM groups WHERE code = ? AND lan_id = ?", String(c.body.code || "").trim().toUpperCase(), lan.id);
     if (!g) throw new F(404, "Zu diesem Code gibt es keine Gruppe.");
     if (await eins(env, "SELECT 1 FROM group_members WHERE user_id = ? AND lan_id = ?", u.id, lan.id)) throw new F(409, "Du bist schon in einer Gruppe – verlasse sie zuerst.");
-    await los(env, "INSERT INTO group_members (group_id, user_id, lan_id, created_at) VALUES (?,?,?,?)", g.id, u.id, lan.id, Date.now());
+    const r = await los(env, "INSERT INTO group_members (group_id, user_id, lan_id, created_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM groups WHERE id = ?)",
+      g.id, u.id, lan.id, Date.now(), g.id);
+    if (!geaendert(r)) throw new F(404, "Diese Gruppe gibt es nicht mehr.");
     await protokoll(c, "gruppe-beigetreten", g.name);
     return { gruppe: await gruppeDetail(env, g.id, u.id) };
   },
@@ -1098,7 +1102,11 @@ const AKTIONEN = {
     const u = brauchtLogin(c);
     const lan = await aktiveLan(env);
     const m = await eins(env, "SELECT g.* FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE gm.user_id = ? AND gm.lan_id = ?", u.id, lan.id);
-    if (!m) return { ok: true };
+    if (!m) {
+      // Verwaister Eintrag (Gruppe gelöscht) – aufräumen, sonst bleibt man „schon in einer Gruppe“.
+      await los(env, "DELETE FROM group_members WHERE user_id = ? AND lan_id = ?", u.id, lan.id);
+      return { ok: true };
+    }
     await mitgliedEntfernen(env, m, u.id);
     await protokoll(c, "gruppe-verlassen", m.name);
     return { ok: true };
@@ -1146,13 +1154,16 @@ const AKTIONEN = {
       if (s.group_id && s.group_id !== g.id && s.g_ablauf > jetzt) throw new F(409, "Platz " + s.label + " ist von einer anderen Gruppe vorgemerkt.");
     }
     const stmts = [st(env, "UPDATE seats SET group_id = NULL WHERE group_id = ?", g.id)];
-    for (const id of ids) stmts.push(st(env, "UPDATE seats SET group_id = ? WHERE id = ?", g.id, id));
+    // Nur freie oder abgelaufene Plätze übernehmen – sonst hätte eine gleichzeitige andere Gruppe Pech.
+    for (const id of ids) stmts.push(st(env, "UPDATE seats SET group_id = ? WHERE id = ? AND (group_id IS NULL OR group_id = ? OR group_id IN (SELECT id FROM groups WHERE ablauf <= ?))", g.id, id, g.id, jetzt));
     // Wer neu vormerkt, verlängert die Haltefrist – sofern erlaubt und nur bis zur Grenze.
     if (e.gruppeVerlaengern !== false) {
       const neu = Math.min(Math.max(g.ablauf, jetzt + e.gruppeHalteTage * 864e5), gruppeGrenze(e, glan, g.created_at));
       if (neu > g.ablauf) stmts.push(st(env, "UPDATE groups SET ablauf = ? WHERE id = ?", neu, g.id));
     }
-    await env.DB.batch(stmts);
+    const erg = await env.DB.batch(stmts);
+    const gesetzt = erg.slice(1, 1 + ids.length).reduce((n, x) => n + ((x.meta && x.meta.changes) || 0), 0);
+    if (gesetzt < ids.length) throw new F(409, "Ein Platz wurde gerade von einer anderen Gruppe vorgemerkt – bitte neu laden und nochmal auswählen.");
     await protokoll(c, "gruppe-sitze", { gruppe: g.name, anzahl: ids.length });
     return { gruppe: await gruppeDetail(env, g.id, u.id) };
   },
@@ -1243,6 +1254,7 @@ const AKTIONEN = {
     if (t.status === "storniert" && (body.sitzId || body.typId != null)) throw new F(409, "Das Ticket ist storniert.");
     if (body.status === "storniert") {
       await los(env, "UPDATE tickets SET status = 'storniert', seat_id = NULL WHERE id = ?", t.id);
+      await los(env, "DELETE FROM uebergaben WHERE lan_id = ? AND von_id = ?", t.lan_id, t.user_id);
     }
     if (body.typId != null) {
       const typ = await eins(env, "SELECT * FROM ticket_types WHERE id = ? AND lan_id = ?", Number(body.typId), t.lan_id);
@@ -1253,10 +1265,15 @@ const AKTIONEN = {
     if (body.orgaNotiz != null) await los(env, "UPDATE tickets SET orga_notiz = ? WHERE id = ?", text(body.orgaNotiz, 500, "Notiz", false), t.id);
     if (body.sitzId !== undefined && body.status !== "storniert") {
       if (!body.sitzId) await los(env, "UPDATE tickets SET seat_id = NULL WHERE id = ?", t.id);
-      else await sitzSetzen(env, t.id, t.user_id, t.lan_id, String(body.sitzId), true);
+      else {
+        const art = await eins(env, "SELECT tt.mit_sitz FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id WHERE t.id = ?", t.id);
+        if (!art || !art.mit_sitz) throw new F(400, "Diese Ticketsorte hat keinen Sitzplatz.");
+        await sitzSetzen(env, t.id, t.user_id, t.lan_id, String(body.sitzId), true);
+      }
     }
     if (body.otpNeu) await los(env, "UPDATE tickets SET otp = ? WHERE id = ?", otpErzeugen(), t.id);
     await protokoll(c, "ticket-geaendert", { ticket: t.id, ...body, aktion: undefined });
+    if (body.typId != null || body.status !== undefined || body.sitzId !== undefined) await stufeNachziehen(c, t.lan_id);
     return { ticket: await ticketDetail(env, t.id) };
   },
 
@@ -1315,17 +1332,17 @@ const AKTIONEN = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`, lan.id, userId, typ.id, hex(zufallsBytes(16)), bezahlt ? "bezahlt" : "offen", zahlart, preis, jetzt,
       bezahlt ? jetzt : null, bezahlt ? ich.nick : "", [body.frei ? "Freiticket" : "", text(body.orgaNotiz, 500, "Notiz", false) || "Vor Ort angelegt von " + ich.nick].filter(Boolean).join(" · "));
     const ticketId = t.meta.last_row_id;
+    let hinweis = "";
     try {
       if (sitzId) await sitzSetzen(env, ticketId, userId, lan.id, sitzId, true);
     } catch (e) {
-      // Platz inzwischen weg: Konto und Ticket bleiben, die Orga setzt den Platz nach.
-      await protokoll(c, "gast-vor-ort", { nick, platzFehler: e.message });
-      return { ticket: await ticketDetail(env, ticketId), passwort, hinweis: e.message + " Konto und Ticket sind angelegt – bitte den Platz im Ticket nachtragen." };
+      // Platz inzwischen weg: Konto, Ticket und Check-in bleiben, die Orga setzt den Platz nach.
+      hinweis = e.message + " Konto und Ticket sind angelegt – bitte den Platz im Ticket nachtragen.";
     }
     if (body.einchecken) await los(env, "UPDATE tickets SET checkin_at = ?, checkin_von = ?, otp = ? WHERE id = ?", jetzt, ich.nick, otpErzeugen(), ticketId);
-    await protokoll(c, "gast-vor-ort", { nick, typ: typ.name, platz: sitzId || "", eingecheckt: !!body.einchecken });
+    await protokoll(c, "gast-vor-ort", { nick, typ: typ.name, platz: hinweis ? "" : sitzId || "", platzFehler: hinweis || undefined, eingecheckt: !!body.einchecken });
     await stufeNachziehen(c, lan.id);
-    return { ticket: await ticketDetail(env, ticketId), passwort };
+    return { ticket: await ticketDetail(env, ticketId), passwort, ...(hinweis ? { hinweis } : {}) };
   },
 
   // ---------- Verwaltung: Gruppen ----------
@@ -1481,7 +1498,7 @@ const AKTIONEN = {
     if (besetzt.length) throw new F(409, "Diese Plätze sind vergeben und können nicht gelöscht werden: " + besetzt.map((s) => s.label).join(", ") + ". Erst die Gäste umsetzen.");
     const altIds = new Set(alt.map((s) => s.id));
     const stmts = [];
-    for (const s of alt) if (!neueIds.has(s.id)) stmts.push(st(env, "DELETE FROM seats WHERE id = ?", s.id));
+    for (const s of alt) if (!neueIds.has(s.id)) stmts.push(st(env, "DELETE FROM seats WHERE id = ? AND NOT EXISTS (SELECT 1 FROM tickets WHERE seat_id = seats.id)", s.id));
     // Labels erst freiräumen, damit Umbenennungen (A1 <-> A2) nicht am UNIQUE-Index scheitern.
     for (const s of neu) if (altIds.has(s.id)) stmts.push(st(env, "UPDATE seats SET label = ? WHERE id = ?", "~" + s.id, s.id));
     for (const s of neu) {
@@ -1491,6 +1508,7 @@ const AKTIONEN = {
     stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lan.id, JSON.stringify({ breite, hoehe, deko })));
     await env.DB.batch(stmts);
     await protokoll(c, "plan", { sitze: neu.length });
+    await stufeNachziehen(c, lan.id);
     return { ok: true, sitze: neu.length };
   },
 
@@ -1582,6 +1600,7 @@ const AKTIONEN = {
     }
     if (stmts.length) await env.DB.batch(stmts);
     await protokoll(c, "sitz-status", { lan: lan.id, anzahl: stmts.length });
+    await stufeNachziehen(c, lan.id);
     return { ok: true, geaendert: stmts.length };
   },
 
@@ -1651,9 +1670,10 @@ const AKTIONEN = {
     const lan = await lanAusBody(c);
     const besetzt = await alle(env, "SELECT s.label FROM seats s JOIN tickets t ON t.seat_id = s.id WHERE s.lan_id = ?", lan.id);
     if (besetzt.length) throw new F(409, `In dieser LAN haben schon ${besetzt.length} Gäste einen Platz (${besetzt.slice(0, 8).map((s) => s.label).join(", ")}${besetzt.length > 8 ? " …" : ""}). Eine Vorlage geht nur bei einem Plan ohne vergebene Plätze – sonst im Sitzplan-Editor ändern.`);
-    const stmts = [st(env, "DELETE FROM seats WHERE lan_id = ?", lan.id), ...(await vorlageStatements(env, lan.id, body.vorlageId))];
+    const stmts = [st(env, "DELETE FROM seats WHERE lan_id = ? AND id NOT IN (SELECT seat_id FROM tickets WHERE seat_id IS NOT NULL)", lan.id), ...(await vorlageStatements(env, lan.id, body.vorlageId))];
     await env.DB.batch(stmts);
     await protokoll(c, "vorlage-anwenden", { lan: lan.id, vorlage: body.vorlageId });
+    await stufeNachziehen(c, lan.id);
     return { ok: true };
   },
 
@@ -1683,7 +1703,7 @@ const AKTIONEN = {
   async adminEinstellungSpeichern(c) {
     brauchtAdmin(c);
     const key = String(c.body.key || "");
-    if (!(key in STANDARD)) throw new F(400, "Unbekannte Einstellung.");
+    if (!Object.prototype.hasOwnProperty.call(STANDARD, key)) throw new F(400, "Unbekannte Einstellung.");
     let w = c.body.wert;
     // Objekt-Einstellungen mit den Standardwerten auffüllen, damit kein Pflichtfeld (z. B. zahlung.arten) fehlt.
     const std = STANDARD[key];
@@ -1833,11 +1853,16 @@ async function portalPruefen(env, body, speichern) {
 
   // Bremse: höchstens 10 Fehlversuche je Gerät (ohne MAC: je Nutzername UND Absender) in 10 Minuten.
   // Der Absender zählt mit, damit niemand von außen per Fehlversuchen einen Gast am Hallen-Portal aussperrt.
+  // Kommt die MAC ungeprüft vom Absender (/check_otp), zählt sie nicht – sonst umgeht eine Zufalls-MAC je
+  // Versuch die Bremse. Zusätzlich gilt je Nutzername insgesamt eine Obergrenze von 30 Fehlversuchen.
   const quelle = String(body.quelle || "").slice(0, 64);
-  const fehl = mac
-    ? await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, jetzt - 10 * 60e3)
-    : await eins(env, "SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND quelle = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), quelle, jetzt - 10 * 60e3);
-  if (nutzer && fehl.n >= 10) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
+  const seit = jetzt - 10 * 60e3;
+  const [[fehl], [fehlNick]] = await lesen(env,
+    mac && !body.macUnsicher
+      ? ["SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, seit]
+      : ["SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND quelle = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), quelle, seit],
+    ["SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), seit]);
+  if (nutzer && (fehl.n >= 10 || fehlNick.n >= 30)) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
 
   const t = !nutzer ? null : await eins(env, `SELECT t.*, u.nick, u.gesperrt, s.label AS sitz_label FROM tickets t
       JOIN users u ON u.id = t.user_id LEFT JOIN seats s ON s.id = t.seat_id
@@ -1893,7 +1918,7 @@ async function checkOtp(request, env, cors) {
   try {
     if (!env.DB) throw new Error("Datenbank-Binding DB fehlt");
     await bereitmachen(env);
-    const r = await portalPruefen(env, { nutzer: username, code: otp, mac: body.mac, ip: body.ip, ohneMac: true, quelle: ip }, true);
+    const r = await portalPruefen(env, { nutzer: username, code: otp, mac: body.mac, ip: body.ip, ohneMac: true, macUnsicher: true, quelle: ip }, true);
     if (r.ok) return antwort(200, "Ok");
     if (!e || e.bis < Date.now()) otpFehlschlaege.set(ip, { anzahl: 1, bis: Date.now() + 10 * 60e3 });
     else e.anzahl++;
@@ -2005,6 +2030,57 @@ async function paypalAnfrage(env, methode, pfad, daten, idem) {
   return j;
 }
 
+// PayPal-Bestellung prüfen, erst dann einziehen und das Ticket als bezahlt markieren.
+// Reihenfolge ist wichtig: Betrag und Ticket VOR dem Einzug vergleichen, die Capture-ID
+// sofort danach speichern – so geht keine Zahlung verloren, auch wenn danach etwas schiefgeht.
+async function paypalEinziehen(c, t, orderId) {
+  const env = c.env;
+  const pfad = "/v2/checkout/orders/" + encodeURIComponent(orderId);
+  const passt = (einh, betrag) => !!einh && betrag && betrag.currency_code === "EUR"
+    && Math.round(Number(betrag.value) * 100) === t.preis_cent && String(einh.custom_id || "") === String(t.id);
+  let erg = await paypalAnfrage(env, "GET", pfad);
+  if (erg.status === "APPROVED") {
+    const einh = (erg.purchase_units || [])[0];
+    if (!passt(einh, einh && einh.amount)) {
+      await los(env, "UPDATE tickets SET paypal_order = '' WHERE id = ? AND paypal_order = ?", t.id, orderId);
+      await protokoll(c, "paypal-betrag-geaendert", { ticket: t.id, order: orderId });
+      throw new F(409, "Der Ticketpreis hat sich geändert – es wurde nichts abgebucht. Bitte starte die Zahlung neu.");
+    }
+    try {
+      erg = await paypalAnfrage(env, "POST", pfad + "/capture", {}, "capture-" + orderId);
+    } catch (e) {
+      // Schon eingezogen (z. B. Seite doppelt geladen) → Stand abfragen
+      if (!(e instanceof F) || !/ORDER_ALREADY_CAPTURED/.test(e.message)) throw e;
+      erg = await paypalAnfrage(env, "GET", pfad);
+    }
+  }
+  const einh = (erg.purchase_units || [])[0] || {};
+  const cap = ((einh.payments || {}).captures || [])[0];
+  if (!cap) throw new F(409, "Die Zahlung wurde bei PayPal noch nicht bestätigt. Versuch es bitte nochmal.");
+  // Ab hier ist (wahrscheinlich) Geld unterwegs: Capture-ID sofort festhalten. Sperrt Storno und neue Zahlung.
+  await los(env, "UPDATE tickets SET paypal_capture = ? WHERE id = ?", (cap.status === "COMPLETED" ? "" : cap.status + ":") + cap.id, t.id);
+  if (cap.status !== "COMPLETED") {
+    await protokoll(c, "paypal-nicht-abgeschlossen", { ticket: t.id, status: erg.status, capture: cap.id, capStatus: cap.status });
+    throw new F(409, cap.status === "PENDING"
+      ? "PayPal prüft die Zahlung noch. Die Orga bestätigt dein Ticket, sobald das Geld da ist."
+      : "Die Zahlung wurde von PayPal nicht abgeschlossen (" + cap.status + "). Bitte melde dich bei der Orga.");
+  }
+  const betrag = Math.round(Number(cap.amount && cap.amount.value) * 100);
+  if (!passt({ custom_id: einh.custom_id || cap.custom_id }, cap.amount)) {
+    await protokoll(c, "paypal-betrag-falsch", { ticket: t.id, betrag, soll: t.preis_cent, capture: cap.id });
+    throw new F(409, "Der bezahlte Betrag passt nicht zum Ticket. Die Orga schaut sich das an.");
+  }
+  const r = await los(env, "UPDATE tickets SET status = 'bezahlt', bezahlt_at = ?, bezahlt_von = 'PayPal', zahlart = 'paypal_direkt' WHERE id = ? AND status = 'offen'",
+    Date.now(), t.id);
+  if (!geaendert(r)) {
+    const jetzt = await eins(env, "SELECT status FROM tickets WHERE id = ?", t.id);
+    if (jetzt && jetzt.status === "bezahlt") return;
+    await protokoll(c, "paypal-bezahlt-ticket-nicht-offen", { ticket: t.id, capture: cap.id, status: jetzt && jetzt.status });
+    throw new F(409, "Deine Zahlung ist eingegangen, aber dein Ticket wurde inzwischen storniert. Bitte melde dich bei der Orga – du bekommst das Geld zurück.");
+  }
+  await protokoll(c, "paypal-bezahlt", { ticket: t.id, betrag, capture: cap.id });
+}
+
 // Automatische Ausbaustufe: Sind so viele Sitzplatz-Tickets verkauft, wie die aktive Stufe
 // Plätze hat, wird die nächste Stufe freigeschaltet (nur aufwärts, nie zurück).
 // Beispiel: Stufe 1 = 96 Plätze → mit dem 96. Ticket öffnet Stufe 2, der 97. Gast kann kaufen.
@@ -2013,7 +2089,8 @@ async function stufeNachziehen(c, lanId) {
   const [[l], stufen, [t]] = await lesen(env,
     ["SELECT stufe_aktiv, stufe_auto FROM lans WHERE id = ?", lanId],
     ["SELECT stufe, COUNT(*) AS n FROM seats WHERE lan_id = ? AND gesperrt = 0 GROUP BY stufe ORDER BY stufe", lanId],
-    [`SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert'`, lanId]);
+    [`SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id LEFT JOIN seats s ON s.id = t.seat_id
+      WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert' AND COALESCE(s.gesperrt, 0) = 0`, lanId]);
   if (!l) return 1;
   const alt = l.stufe_aktiv || 1;
   if (!l.stufe_auto || !stufen.length) return alt;
@@ -2066,11 +2143,15 @@ async function eigeneGruppe(c, u) {
 }
 
 async function mitgliedEntfernen(env, g, userId) {
-  await los(env, "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", g.id, userId);
+  // In EINEM Batch: Wer zuletzt geht, löscht die Gruppe – auch wenn zwei gleichzeitig gehen.
+  const leer = "NOT EXISTS (SELECT 1 FROM group_members WHERE group_id = ?)";
+  await env.DB.batch([
+    st(env, "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", g.id, userId),
+    st(env, `UPDATE seats SET group_id = NULL WHERE group_id = ? AND ${leer}`, g.id, g.id),
+    st(env, `DELETE FROM groups WHERE id = ? AND ${leer}`, g.id, g.id),
+  ]);
   const rest = await alle(env, "SELECT user_id FROM group_members WHERE group_id = ? ORDER BY created_at", g.id);
-  if (!rest.length) {
-    await env.DB.batch([st(env, "UPDATE seats SET group_id = NULL WHERE group_id = ?", g.id), st(env, "DELETE FROM groups WHERE id = ?", g.id)]);
-  } else if (g.owner_id === userId) {
+  if (rest.length && g.owner_id === userId) {
     await los(env, "UPDATE groups SET owner_id = ? WHERE id = ?", rest[0].user_id, g.id);
   }
 }

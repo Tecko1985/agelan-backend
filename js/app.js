@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=57";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl, drucken } from "./ui.js?v=57";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=58";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl, drucken } from "./ui.js?v=58";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=57")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=58")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -97,11 +97,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=57")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=57")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=57")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=57")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=57")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=58")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=58")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=58")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=58")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=58")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -187,7 +187,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=57");
+    const konto = await import("./konto.js?v=58");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
