@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=32";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=32";
-import { planSvg, U } from "./plan.js?v=32";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=32";
+import { api } from "./api.js?v=33";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=33";
+import { planSvg, U } from "./plan.js?v=33";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=33";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],

@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=32";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=32";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=32";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=32";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=32";
+import { api, istDemo } from "./api.js?v=33";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=33";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=33";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=33";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=33";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=32");
+    const { ticketHtml } = await import("./konto.js?v=33");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,14 +413,18 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=32");
+  planModul = await import("./planeditor.js?v=33");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
 // ---------------------------------------------------------------------------
 async function tickettypen(box) {
-  const { tickettypen: ts } = await api("adminTickettypen", { lanId });
+  const [{ tickettypen: ts }, { lans: alleLans }] = await Promise.all([api("adminTickettypen", { lanId }), api("adminLans")]);
+  const lan = alleLans.find((l) => l.id === lanId);
   box.innerHTML = kopf("Ticketsorten", `<button class="knopf primaer klein" data-neu>+ Neue Sorte</button>`) + `
+    <div class="karte zeile zwischen" style="margin-bottom:14px;padding:14px 18px">
+      <label class="check" style="font-size:1rem"><input type="checkbox" data-verkauf ${lan && lan.verkaufOffen ? "checked" : ""}> <b>Ticketverkauf offen</b></label>
+      <span class="klein ${lan && lan.verkaufOffen ? "gruen" : "leise"}" data-verkauf-text>${lan && lan.verkaufOffen ? "Gäste können Tickets kaufen." : "Verkauf geschlossen – auf der Website ist nichts bestellbar."}</span></div>
     <div class="tabelle-wrap"><table><thead><tr><th>#</th><th>Name</th><th class="zahl">Preis</th><th>Sitz</th><th>Aktiv</th><th>Kaufbar</th><th class="zahl">Verkauft / Limit</th><th>Zeitraum</th><th></th></tr></thead><tbody>
     ${ts.map((t) => `<tr><td class="leise">${t.sort}</td><td><b>${esc(t.name)}</b>${t.extras.length ? `<div class="klein leise">+ ${t.extras.map((x) => esc(x.name)).join(", ")}</div>` : ""}</td><td class="zahl">${euro(t.preisCent)}</td>
       <td>${t.mitSitz ? "✓" : "–"}</td><td>${t.aktiv ? "✓" : "–"}</td><td>${t.kaufbar ? "✓" : "–"}</td><td class="zahl">${t.verkauft} / ${t.limit || "∞"}</td>
@@ -454,6 +458,19 @@ async function tickettypen(box) {
   };
   $("[data-neu]", box).onclick = () => bearbeiten();
   $$("[data-bearbeiten]", box).forEach((b) => (b.onclick = () => bearbeiten(ts.find((t) => t.id === Number(b.dataset.bearbeiten)))));
+  const vk = $("[data-verkauf]", box);
+  vk.onchange = async () => {
+    vk.disabled = true;
+    try {
+      await api("adminLanSpeichern", { lan: { ...lan, verkaufOffen: vk.checked } });
+      lan.verkaufOffen = vk.checked;
+      toast(vk.checked ? "Ticketverkauf ist offen." : "Ticketverkauf ist geschlossen.", "ok");
+      const t = $("[data-verkauf-text]", box);
+      t.className = "klein " + (vk.checked ? "gruen" : "leise");
+      t.textContent = vk.checked ? "Gäste können Tickets kaufen." : "Verkauf geschlossen – auf der Website ist nichts bestellbar.";
+    } catch (e) { vk.checked = !vk.checked; fehler(e); }
+    vk.disabled = false;
+  };
   // Kopie für die nächste Preisstufe: alles übernehmen, neue Sortierung, „ab“ = Tag nach dem bisherigen Ende.
   $$("[data-kopieren-typ]", box).forEach((b) => (b.onclick = () => {
     const q = ts.find((t) => t.id === Number(b.dataset.kopierenTyp));
@@ -782,7 +799,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=32");
+    const { ticketHtml } = await import("./konto.js?v=33");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
