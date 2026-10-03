@@ -307,6 +307,11 @@ td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .rechtstext li { margin-bottom: 8px; }
 .rechtstext .stand { color: var(--leise); font-size: 0.9rem; }
 .rechtstext a { word-break: break-word; }
+/* Anfahrt-Karte auf „Die LAN“: kleine goldene Zwischenüberschriften, Adresse als Block */
+.anfahrt-text h2, .anfahrt-text h3 { font-size: 0.95rem; margin: 16px 0 4px; color: var(--gold2); letter-spacing: 0.02em; border: 0; padding: 0; }
+.anfahrt-text > :first-child { margin-top: 2px; }
+.anfahrt-text p { margin: 0 0 6px; color: #d9d6ce; }
+.anfahrt-text ul { margin: 0 0 6px; padding-left: 20px; }
 
 /* ---------- FAQ ---------- */
 details.faq { border: 0; border-bottom: 1px solid #25262c; background: none; margin: 0; }

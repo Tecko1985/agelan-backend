@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=27";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=27";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=27";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=27";
+import { api } from "./api.js?v=28";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=28";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=28";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=28";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
