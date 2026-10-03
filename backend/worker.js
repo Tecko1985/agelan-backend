@@ -1303,7 +1303,9 @@ const AKTIONEN = {
       labels.add(label.toLowerCase());
       const x = Number(s.x), y = Number(s.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) throw new F(400, "Ungültige Position bei " + label);
-      return { id: String(s.id || zufallsId()).slice(0, 32), label, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2, gesperrt: s.gesperrt ? 1 : 0 };
+      return { id: String(s.id || zufallsId()).slice(0, 32), label, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2, gesperrt: s.gesperrt ? 1 : 0,
+        // Ältere Editor-Fassungen schicken keine Stage mit – dann bleibt die gespeicherte.
+        stufe: s.stufe == null ? null : Math.max(1, Math.min(9, Math.round(Number(s.stufe)) || 1)) };
     });
     const deko = (Array.isArray(plan.deko) ? plan.deko : []).slice(0, 300).map((d) => ({
       id: String(d.id || zufallsId()).slice(0, 32), typ: ["flaeche", "text", "wand"].includes(d.typ) ? d.typ : "flaeche",
@@ -1320,8 +1322,8 @@ const AKTIONEN = {
     // Labels erst freiräumen, damit Umbenennungen (A1 <-> A2) nicht am UNIQUE-Index scheitern.
     for (const s of neu) if (altIds.has(s.id)) stmts.push(st(env, "UPDATE seats SET label = ? WHERE id = ?", "~" + s.id, s.id));
     for (const s of neu) {
-      if (altIds.has(s.id)) stmts.push(st(env, "UPDATE seats SET label = ?, x = ?, y = ?, gesperrt = ? WHERE id = ?", s.label, s.x, s.y, s.gesperrt, s.id));
-      else stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt) VALUES (?,?,?,?,?,?)", s.id, lan.id, s.label, s.x, s.y, s.gesperrt));
+      if (altIds.has(s.id)) stmts.push(st(env, "UPDATE seats SET label = ?, x = ?, y = ?, gesperrt = ?, stufe = COALESCE(?, stufe) WHERE id = ?", s.label, s.x, s.y, s.gesperrt, s.stufe, s.id));
+      else stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, stufe) VALUES (?,?,?,?,?,?,?)", s.id, lan.id, s.label, s.x, s.y, s.gesperrt, s.stufe || 1));
     }
     stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lan.id, JSON.stringify({ breite, hoehe, deko })));
     await env.DB.batch(stmts);

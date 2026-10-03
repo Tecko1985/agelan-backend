@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=49";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=49";
-import { planSvg, planGroesse, U } from "./plan.js?v=49";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=49";
+import { api } from "./api.js?v=50";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=50";
+import { planSvg, planGroesse, U } from "./plan.js?v=50";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=50";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -36,7 +36,7 @@ export async function editor(container, lanId) {
   schliessen();
   const st = {
     plan: { breite: daten.plan.breite, hoehe: daten.plan.hoehe, deko: (daten.plan.deko || []).map((d) => ({ ...d })) },
-    sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt != null ? s.gesperrt : s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick })),
+    sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt != null ? s.gesperrt : s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick, stufe: s.stufe || 1 })),
     auswahl: new Set(), werkzeug: "auswahl", zoom: 1, verlauf: [], geaendert: false,
   };
   // Liegen Plätze/Flächen außerhalb der eingestellten Größe, Fläche passend vergrößern (+1 Rand),
@@ -70,7 +70,8 @@ export async function editor(container, lanId) {
       <div class="gruppe"><label class="klein leise">Breite <input data-gr="breite" type="number" min="4" max="200" style="width:64px;padding:5px"></label>
         <label class="klein leise">Höhe <input data-gr="hoehe" type="number" min="4" max="200" style="width:64px;padding:5px"></label></div>
       <div class="gruppe"><button class="knopf klein primaer" data-a="speichern">Speichern</button><button class="knopf klein geist" data-a="verwerfen">Verwerfen</button>
-        <button class="knopf klein" data-a="vorlagen" title="Sitzanordnung als Vorlage speichern oder eine Vorlage laden">Vorlagen</button></div>
+        <button class="knopf klein" data-a="vorlagen" title="Sitzanordnung als Vorlage speichern oder eine Vorlage laden">Vorlagen</button>
+        <button class="werkzeug" data-a="stages" title="Plätze nach Stage einfärben (grün 1, blau 2, lila 3, orange 4). Stage eines Platzes rechts unter „Platz“ ändern.">Stages</button></div>
     </div>
     <div class="plan-layout">
       <div class="plan-buehne" id="e-buehne" style="max-height:72vh"></div>
@@ -91,10 +92,12 @@ export async function editor(container, lanId) {
   let vorschau = ""; // Gummiband/Rechteck während des Ziehens
   const zeichnen = () => {
     const sitzeAnsicht = st.sitze.map((s) => ({ ...s, status: s.gesperrt ? "gesperrt" : s.belegt ? "belegt" : "frei" }));
+    buehne.classList.toggle("stufen-plan", !!st.stagesZeigen);
     buehne.innerHTML = planSvg(st.plan, sitzeAnsicht, {
       zoom: st.zoom, raster: true, svgKlasse: "editor-svg w-" + st.werkzeug, extra: vorschau,
-      klassen: (x) => (st.auswahl.has(x.id) ? "gewaehlt" : ""),
+      klassen: (x, istDeko) => [st.auswahl.has(x.id) ? "gewaehlt" : "", !istDeko && st.stagesZeigen ? "st-" + (x.stufe || 1) : ""].join(" "),
     });
+    const sz = $("[data-a=stages]", container); if (sz) sz.classList.toggle("an", !!st.stagesZeigen);
     $$("[data-w]", container).forEach((b) => b.classList.toggle("an", b.dataset.w === st.werkzeug));
     const rg = $("[data-reihe-gruppe]", container);
     if (rg) { rg.classList.toggle("versteckt", st.werkzeug !== "setzen"); reiheHinweis(); }
@@ -257,7 +260,8 @@ export async function editor(container, lanId) {
     const alle = st.sitze.length, gesperrt = st.sitze.filter((s) => s.gesperrt).length;
     if (!sitze.length && !deko.length) {
       box.innerHTML = `<h3>Plan</h3><dl class="daten-liste"><dt>Plätze</dt><dd><b>${alle}</b> (${alle - gesperrt} buchbar)</dd><dt>Vergeben</dt><dd>${st.sitze.filter((s) => s.belegt).length}</dd>
-        <dt>Elemente</dt><dd>${st.plan.deko.length}</dd></dl><p class="klein leise" style="margin-top:10px">Nichts ausgewählt. ${st.geaendert ? `<b class="gold">Ungespeicherte Änderungen.</b>` : ""}</p>`;
+        <dt>Elemente</dt><dd>${st.plan.deko.length}</dd>
+        ${Math.max(...st.sitze.map((s) => s.stufe || 1), 1) > 1 ? `<dt>Stages</dt><dd>${[...new Set(st.sitze.map((s) => s.stufe || 1))].sort().map((n) => `${n}: ${st.sitze.filter((s) => (s.stufe || 1) === n && !s.gesperrt).length}`).join(" · ")}</dd>` : ""}</dl><p class="klein leise" style="margin-top:10px">Nichts ausgewählt. ${st.geaendert ? `<b class="gold">Ungespeicherte Änderungen.</b>` : ""}</p>`;
       return;
     }
     if (deko.length === 1 && !sitze.length) {
@@ -282,6 +286,7 @@ export async function editor(container, lanId) {
         ${s.belegt ? `<div class="abzeichen rot">Vergeben${s.nick ? " an " + esc(s.nick) : ""}</div>` : ""}
         <label class="feld"><span>Name</span><input name="label" value="${esc(s.label)}" maxlength="12"></label>
         <label class="check"><input type="checkbox" name="gesperrt" ${s.gesperrt ? "checked" : ""}> Gesperrt (nicht buchbar)</label>
+        <label class="feld"><span>Stage (ab wann buchbar)</span><select name="stufe">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<option value="${n}" ${(s.stufe || 1) === n ? "selected" : ""}>Stage ${n}</option>`).join("")}</select></label>
         <div class="klein leise">Position: ${s.x} / ${s.y}</div>
         ${s.belegt ? "" : `<button class="knopf klein rot" data-loeschen>Löschen</button>`}</div>`;
       const lab = $("[name=label]", box);
@@ -292,16 +297,22 @@ export async function editor(container, lanId) {
         merken(); s.label = v; zeichnen();
       };
       $("[name=gesperrt]", box).onchange = (e) => { merken(); s.gesperrt = e.target.checked; zeichnen(); };
+      $("[name=stufe]", box).onchange = (e) => { merken(); s.stufe = Number(e.target.value); if (!st.stagesZeigen) toast("Stage " + s.stufe + " – mit „Stages“ in der Leiste siehst du alle Stages farbig."); zeichnen(); };
       const l = $("[data-loeschen]", box); if (l) l.onclick = loeschen;
       return;
     }
     box.innerHTML = `<h3>${sitze.length} Plätze${deko.length ? " + " + deko.length + " Elemente" : ""}</h3><div class="stapel">
       ${sitze.length ? `<button class="knopf klein voll" data-nummer>🔢 Neu benennen …</button>
         <div class="zeile"><button class="knopf klein" data-sperren="1">Sperren</button><button class="knopf klein" data-sperren="0">Entsperren</button></div>
+        <div class="zeile" style="align-items:center"><span class="klein leise">Stage für alle:</span>${[1, 2, 3, 4].map((n) => `<button class="knopf klein stufe-knopf st-${n}" data-stage="${n}">${n}</button>`).join("")}
+          <select data-stage-mehr style="width:auto;padding:4px"><option value="">…</option>${[5, 6, 7, 8, 9].map((n) => `<option>${n}</option>`).join("")}</select></div>
         <button class="knopf klein voll" data-kopie>⧉ Duplizieren (rechts daneben)</button>` : ""}
       <button class="knopf klein rot voll" data-loeschen>Löschen</button></div>`;
     $("[data-loeschen]", box).onclick = loeschen;
     $$("[data-sperren]", box).forEach((b) => (b.onclick = () => { merken(); sitze.forEach((s) => (s.gesperrt = b.dataset.sperren === "1")); zeichnen(); }));
+    const stageSetzen = (n) => { merken(); sitze.forEach((s) => (s.stufe = n)); st.stagesZeigen = true; toast(sitze.length + " Plätze auf Stage " + n + " gesetzt.", "ok"); zeichnen(); };
+    $$("[data-stage]", box).forEach((b) => (b.onclick = () => stageSetzen(Number(b.dataset.stage))));
+    const sm = $("[data-stage-mehr]", box); if (sm) sm.onchange = () => { if (sm.value) stageSetzen(Number(sm.value)); };
     const nr = $("[data-nummer]", box); if (nr) nr.onclick = () => nummerDialog(sitze);
     const kp = $("[data-kopie]", box); if (kp) kp.onclick = () => duplizieren(sitze);
   };
@@ -387,7 +398,7 @@ export async function editor(container, lanId) {
   const duplizieren = (sitze) => {
     const minX = Math.min(...sitze.map((s) => s.x)), maxX = Math.max(...sitze.map((s) => s.x));
     const dx = maxX - minX + 2;
-    const kopie = sitze.map((s) => ({ id: neueId(), label: s.label + "'", x: s.x + dx, y: s.y, gesperrt: s.gesperrt, belegt: false }));
+    const kopie = sitze.map((s) => ({ id: neueId(), label: s.label + "'", x: s.x + dx, y: s.y, gesperrt: s.gesperrt, belegt: false, stufe: s.stufe || 1 }));
     if (kopie.some((s) => !zelleFrei(s.x, s.y))) { toast("Rechts daneben ist kein Platz.", "fehler"); return; }
     merken();
     st.sitze.push(...kopie);
@@ -400,7 +411,7 @@ export async function editor(container, lanId) {
 
   // ---- Vorlagen: aktuelle Anordnung speichern oder eine gespeicherte laden ----
   const planSpeichern = async () => {
-    const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt }) => ({ id, label, x, y, gesperrt })) });
+    const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt, stufe }) => ({ id, label, x, y, gesperrt, stufe: stufe || 1 })) });
     st.geaendert = false;
     return r;
   };
@@ -446,8 +457,9 @@ export async function editor(container, lanId) {
     else if (a === "zoom-" || a === "zoom+") { st.zoom = Math.min(2.5, Math.max(0.4, st.zoom + (a === "zoom+" ? 0.2 : -0.2))); zeichnen(); }
     else if (a === "verwerfen") { if (!st.geaendert || await bestaetigen("Alle ungespeicherten Änderungen verwerfen?", { ja: "Verwerfen", gefahr: true })) { ich.abbau(); editor(container, lanId); } }
     else if (a === "vorlagen") mitSperre(b, () => vorlagenDialog());
+    else if (a === "stages") { st.stagesZeigen = !st.stagesZeigen; zeichnen(); }
     else if (a === "speichern") mitSperre(b, async () => {
-      const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt }) => ({ id, label, x, y, gesperrt })) });
+      const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt, stufe }) => ({ id, label, x, y, gesperrt, stufe: stufe || 1 })) });
       st.geaendert = false;
       toast("Sitzplan gespeichert – " + r.sitze + " Plätze.", "ok");
       eigenschaften();
