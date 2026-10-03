@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=35";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=35";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=35";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=35";
+import { api } from "./api.js?v=36";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=36";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=36";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=36";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
@@ -28,7 +28,7 @@ export async function render(main, param) {
           <input id="p-suche" placeholder="Nick oder Platz suchen …" style="max-width:240px">
           <span class="leise klein" id="p-stand"></span>
         </div>
-        <div class="plan-info leise klein" id="p-info" aria-live="polite"></div>
+        <div class="plan-info" id="p-info" aria-live="polite">${sitzKarte(null)}</div>
         <div class="plan-buehne" id="buehne"></div>
       </div>
       <aside class="stapel" id="seite"></aside>
@@ -82,11 +82,11 @@ export async function render(main, param) {
   buehne.addEventListener("click", async (e) => {
     const g = e.target.closest("[data-sitz]");
     if (!g) return;
-    if (!ich) { const s = daten.sitze.find((x) => x.id === g.dataset.sitz); if (s) $("#p-info", main).innerHTML = sitzInfo(s); return; }
+    if (!ich) { const s = daten.sitze.find((x) => x.id === g.dataset.sitz); if (s) $("#p-info", main).innerHTML = sitzKarte(s); return; }
     const s = daten.sitze.find((x) => x.id === g.dataset.sitz);
     if (!s) return;
     // Ohne Maus gibt es keinen Tooltip – Details stehen dann über dem Plan.
-    $("#p-info", main).innerHTML = sitzInfo(s);
+    $("#p-info", main).innerHTML = sitzKarte(s);
     if (gruppenModus) {
       if (auswahl.has(s.id)) auswahl.delete(s.id);
       else {
@@ -125,6 +125,12 @@ export async function render(main, param) {
   }));
   $("#p-suche", main).oninput = zeichnen;
   tooltipAnbinden(buehne, (id) => daten.sitze.find((s) => s.id === id));
+  // Am PC zeigt schon das Überfahren die Info-Karte (Handy: Antippen, siehe oben).
+  if (!beruehrung) buehne.addEventListener("pointerover", (e) => {
+    const g = e.target.closest("[data-sitz]");
+    const s = g && daten.sitze.find((x) => x.id === g.dataset.sitz);
+    if (s) $("#p-info", main).innerHTML = sitzKarte(s);
+  });
   zeichnen();
   const ziel = $(".markiert", buehne);
   if (ziel) ziel.scrollIntoView({ block: "center", inline: "center" });
