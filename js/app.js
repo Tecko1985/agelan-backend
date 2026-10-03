@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=24";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=24";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=25";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=25";
 
 export const zustand = { daten: null, ich: null };
 
@@ -46,7 +46,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=24")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=25")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -82,11 +82,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=24")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=24")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=24")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=24")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=24")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=25")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=25")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=25")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=25")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=25")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -166,7 +166,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=24");
+    const konto = await import("./konto.js?v=25");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }

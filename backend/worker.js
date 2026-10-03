@@ -1096,7 +1096,8 @@ const AKTIONEN = {
     } else email = nick.toLowerCase().replace(/[^a-z0-9]+/g, "") + "-" + hex(zufallsBytes(3)) + "@vor-ort.invalid"; // Platzhalter, eindeutig
     const typ = await eins(env, "SELECT * FROM ticket_types WHERE id = ? AND lan_id = ?", Number(body.typId), lan.id);
     if (!typ) throw new F(404, "Ticketsorte nicht gefunden.");
-    const preis = ich.rolle === "admin" && body.preisCent != null ? ganz(body.preisCent, "Preis", 0, 1e6) : typ.preis_cent;
+    // Freiticket darf auch die Orga vergeben; einen anderen Preis nur der Veranstalter.
+    const preis = body.frei ? 0 : ich.rolle === "admin" && body.preisCent != null ? ganz(body.preisCent, "Preis", 0, 1e6) : typ.preis_cent;
     const bezahlt = !!body.bezahlt || preis === 0;
     const zahlart = ZAHLARTEN[body.zahlart] ? body.zahlart : "bar";
     const sitzId = body.sitzId ? String(body.sitzId) : "";
@@ -1109,7 +1110,7 @@ const AKTIONEN = {
     const userId = u.meta.last_row_id;
     const t = await los(env, `INSERT INTO tickets (lan_id, user_id, type_id, code, status, zahlart, preis_cent, created_at, bezahlt_at, bezahlt_von, orga_notiz)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`, lan.id, userId, typ.id, hex(zufallsBytes(16)), bezahlt ? "bezahlt" : "offen", zahlart, preis, jetzt,
-      bezahlt ? jetzt : null, bezahlt ? ich.nick : "", text(body.orgaNotiz, 500, "Notiz", false) || "Vor Ort angelegt von " + ich.nick);
+      bezahlt ? jetzt : null, bezahlt ? ich.nick : "", [body.frei ? "Freiticket" : "", text(body.orgaNotiz, 500, "Notiz", false) || "Vor Ort angelegt von " + ich.nick].filter(Boolean).join(" · "));
     const ticketId = t.meta.last_row_id;
     try {
       if (sitzId) await sitzSetzen(env, ticketId, userId, lan.id, sitzId, true);

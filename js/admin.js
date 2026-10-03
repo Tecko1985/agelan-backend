@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=24";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=24";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=24";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=24";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=24";
+import { api, istDemo } from "./api.js?v=25";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=25";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=25";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=25";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=25";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=24");
+    const { ticketHtml } = await import("./konto.js?v=25");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=24");
+  planModul = await import("./planeditor.js?v=25");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -699,7 +699,8 @@ async function gastVorOrt(lan, fertig) {
       <label class="feld" data-platzfeld><span>Platz</span><div class="zeile" style="gap:8px;flex-wrap:nowrap">
         <input name="sitz" readonly placeholder="kein Platz" style="cursor:pointer" data-sitzwahl><button type="button" class="knopf" data-sitzwahl>Sitzplan</button></div></label></div>
     ${admin ? `<label class="feld"><span>Preis (€, leer = Preis der Ticketsorte)</span><input name="preis" type="number" step="0.01" min="0"></label>` : ""}
-    <div class="zeile"><label class="check"><input type="checkbox" name="bezahlt" checked> Bar bezahlt</label>
+    <div class="zeile"><label class="check"><input type="checkbox" name="frei"> Freiticket (0 €)</label>
+      <label class="check"><input type="checkbox" name="bezahlt" checked> Bar bezahlt</label>
       <label class="check"><input type="checkbox" name="einchecken" checked> Gleich einchecken</label></div>
     <label class="feld"><span>Orga-Notiz (optional)</span><input name="orgaNotiz" placeholder="z. B. Muttizettel liegt vor"></label>
     <div class="fehler-text"></div><button class="knopf primaer">Gast anlegen</button></form>`, { breit: true });
@@ -712,6 +713,11 @@ async function gastVorOrt(lan, fertig) {
   };
   f.typId.onchange = typWahl;
   typWahl();
+  // Freiticket: nichts zu kassieren – „bezahlt“ ist dann automatisch.
+  f.frei.onchange = () => {
+    f.bezahlt.checked = true; f.bezahlt.disabled = f.frei.checked;
+    if (f.preis) { f.preis.disabled = f.frei.checked; if (f.frei.checked) f.preis.value = ""; }
+  };
   f.bezahlt.onchange = () => { if (!f.bezahlt.checked) f.einchecken.checked = false; };
   f.einchecken.onchange = () => { if (f.einchecken.checked) f.bezahlt.checked = true; };
   $$("[data-sitzwahl]", f).forEach((x) => (x.onclick = (e) => {
@@ -735,7 +741,7 @@ async function gastVorOrt(lan, fertig) {
         if (preis != null && (!Number.isFinite(preis) || preis < 0)) throw new Error("Bitte einen gültigen Preis eingeben.");
         const r = await api("adminGastAnlegen", {
           lanId: lan.id, nick: v.nick, vorname: v.vorname, nachname: v.nachname, geburtsdatum: v.geburtsdatum, email: v.email,
-          typId: Number(v.typId), sitzId, bezahlt: v.bezahlt, zahlart: "bar", einchecken: v.einchecken, orgaNotiz: v.orgaNotiz, preisCent: preis,
+          typId: Number(v.typId), sitzId, bezahlt: v.bezahlt || v.frei, frei: v.frei, zahlart: "bar", einchecken: v.einchecken, orgaNotiz: v.orgaNotiz, preisCent: v.frei ? null : preis,
         });
         m.schliessen();
         fertig(r.ticket);
@@ -768,7 +774,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=24");
+    const { ticketHtml } = await import("./konto.js?v=25");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
