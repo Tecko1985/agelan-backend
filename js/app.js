@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=52";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=52";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=53";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=53";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=52")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=53")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -96,11 +96,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=52")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=52")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=52")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=52")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=52")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=53")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=53")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=53")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=53")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=53")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -186,7 +186,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=52");
+    const konto = await import("./konto.js?v=53");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -293,15 +293,15 @@ async function seiteTickets(main) {
   const d = await neuLaden();
   const z = d.zahlen;
   const za = d.einstellungen.zahlung;
-  const arten = [za.arten.paypal && "PayPal (Freunde & Familie)", za.arten.ueberweisung && "Überweisung", za.arten.bar && "bar"].filter(Boolean);
+  const arten = [za.arten.paypal_direkt && "PayPal", za.arten.paypal && "PayPal (Freunde & Familie)", za.arten.ueberweisung && "Überweisung", za.arten.bar && "bar"].filter(Boolean);
   main.innerHTML = `<div class="wrap">
     <div class="seitenkopf"><h1>Tickets</h1><p class="leise">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</p>${belegungHtml(z)}</div>
     ${d.lan.verkaufOffen ? "" : `<div class="karte" style="margin:20px 0;border-color:var(--rot)">Der Ticketverkauf ist gerade geschlossen.</div>`}
     <div class="raster raster-3" style="margin-top:22px">${d.tickettypen.map(ticketKarte).join("") || `<div class="leer">Noch keine Tickets im Verkauf.</div>`}</div>
     <div class="karte ablauf" style="margin-top:28px"><h3>So läuft's ab</h3><ol>
       <li><b>Konto anlegen und Ticket bestellen.</b> Bei der Bestellung wählst du, wie du bezahlst. Dein Ticket mit QR-Code steht sofort in deinem <a href="#/konto">Konto</a>.</li>
-      <li><b>Bezahlen</b> – ${esc(arten.join(", "))}.${za.arten.paypal || za.arten.ueberweisung ? ` Bei ${za.arten.paypal && za.arten.ueberweisung ? "PayPal und Überweisung" : za.arten.paypal ? "PayPal" : "Überweisung"} gib als Verwendungszweck deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes an.` : ""}${za.fristTage ? ` Bitte innerhalb von ${za.fristTage} Tagen.` : ""} Sobald das Geld da ist, bestätigt die Orga dein Ticket – erst dann ist dein Platz sicher.</li>
-      <li><b>Platz aussuchen</b> im <a href="#/sitzplan">Sitzplan</a> – sobald deine Zahlung bestätigt ist. Mit Freunden zusammen sitzen? Gründet vorher eine Reservierungsgruppe, merkt einen Block vor und teilt den Gruppen-Code.</li>
+      <li><b>Bezahlen</b> – ${esc(arten.join(", "))}.${za.arten.paypal_direkt ? " Mit PayPal ist dein Ticket sofort bezahlt und du kannst direkt deinen Platz wählen." : ""}${za.arten.paypal || za.arten.ueberweisung ? ` Bei ${za.arten.paypal && za.arten.ueberweisung ? "PayPal (Freunde) und Überweisung" : za.arten.paypal ? "PayPal (Freunde)" : "Überweisung"} gib als Verwendungszweck deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes an.` : ""}${za.fristTage ? ` Bitte innerhalb von ${za.fristTage} Tagen.` : ""} ${za.arten.paypal_direkt ? "Bei Überweisung oder bar bestätigt die Orga dein Ticket, sobald das Geld da ist" : "Sobald das Geld da ist, bestätigt die Orga dein Ticket"} – erst dann ist dein Platz sicher.</li>
+      <li><b>Platz aussuchen</b> im <a href="#/sitzplan">Sitzplan</a> – sobald dein Ticket bezahlt ist. Mit Freunden zusammen sitzen? Gründet vorher eine Reservierungsgruppe, merkt einen Block vor und teilt den Gruppen-Code.</li>
       <li><b>Packen.</b> Was du mitbringen solltest, steht in der <a href="#/packliste">Packliste</a>.</li>
       <li><b>Check-in auf der LAN.</b> Zeig den QR-Code deines Tickets vor – auf dem Handy oder ausgedruckt. Unter 18? Dann bring den unterschriebenen Muttizettel und deine Aufsichtsperson mit.</li>
       <li><b>Loslegen.</b> Nach dem Check-in scannst du deinen Ticket-QR mit dem Handy oder öffnest dein Konto: Dort stehen deine Internet-Zugangsdaten, und über die AgeLan-App bestellst du Essen und meldest dich zu Turnieren an.</li>

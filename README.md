@@ -6,7 +6,7 @@ Nachfolger für age-lan.de bzw. das alte Dota-LAN-Admin-Panel. Später soll das 
 |---|---|
 | **Website** | Start mit Countdown und Belegung, Die LAN, News, Tickets, Sitzplan (live), Gästeliste, FAQ, Texte (Anfahrt/AGB/Datenschutz/Impressum) |
 | **Konto** | Registrieren (Nick, Name, E-Mail, Geburtsdatum, Discord), Login, Daten ändern |
-| **Tickets** | Ticketsorten mit Kontingent, Zeitraum, Extras und Gutscheinen. Bezahlt wird per PayPal (Freunde), Überweisung oder bar; die Orga bestätigt die Zahlung |
+| **Tickets** | Ticketsorten mit Kontingent, Zeitraum, Extras und Gutscheinen. Bezahlt wird per PayPal (Checkout, sofort bestätigt), Überweisung oder bar; Überweisung und bar bestätigt die Orga |
 | **QR-Ticket** | Druckbares Ticket mit QR-Code (`AGELAN:<32 hex>`), Code in Vierergruppen wie beim alten Ticket |
 | **Sitzplan** | Gäste wählen selbst; Reservierungsgruppen mit Code, vorgemerkten Plätzen und Haltefrist |
 | **Sitzplan-Editor** | Plätze setzen, Tischblöcke einfügen, verschieben, umbenennen, sperren; Flächen, Texte und Wände zeichnen |

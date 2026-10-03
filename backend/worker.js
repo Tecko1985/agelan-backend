@@ -144,9 +144,9 @@ const STANDARD = {
     { icon: "😴", titel: "Schlafbereich", text: "Abgetrennt und ruhig" },
   ],
   zahlung: {
-    arten: { paypal_direkt: false, paypal: true, ueberweisung: true, bar: true },
+    arten: { paypal_direkt: true, paypal: false, ueberweisung: true, bar: true },
     paypal: "", paypalMe: "", iban: "", kontoinhaber: "", bank: "",
-    hinweis: "Bitte gib bei PayPal und Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an. Bei PayPal bitte „Freunde und Familie“ wählen.",
+    hinweis: "Bitte gib bei Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an.",
     fristTage: 14,
   },
   faq: [

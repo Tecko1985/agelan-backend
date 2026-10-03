@@ -1,6 +1,6 @@
 // Demo-Modus: der ECHTE Worker (backend/worker.js) läuft im Browser, mit einer
 // SQLite-Datenbank aus sql.js statt D1. Die Datenbank liegt im localStorage.
-import worker from "../backend/worker.js?v=52";
+import worker from "../backend/worker.js?v=53";
 
 const SQL_CDN = "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/";
 const SPEICHER = "agelan-demo-db-v1";
@@ -106,7 +106,7 @@ async function demoDatenAnlegen(db, fetchen) {
   x("INSERT OR REPLACE INTO settings (key, value) VALUES ('zahlung', ?)", [JSON.stringify({
     arten: { paypal: true, ueberweisung: true, bar: true },
     paypal: "tickets@demo.invalid", paypalMe: "", iban: "DE00 1234 5678 9000 0000 00", kontoinhaber: "Demo Orga", bank: "Demo-Bank",
-    hinweis: "Bitte gib bei PayPal und Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an. Bei PayPal bitte „Freunde und Familie“ wählen.",
+    hinweis: "Bitte gib bei Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an.",
     fristTage: 14,
   })]);
   x("INSERT OR REPLACE INTO settings (key, value) VALUES ('sponsoren', ?)", [JSON.stringify([
