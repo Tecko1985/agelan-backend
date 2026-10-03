@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=47";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=47";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=47";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=47";
+import { api } from "./api.js?v=48";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=48";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=48";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=48";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
@@ -28,6 +28,7 @@ export async function render(main, param) {
           <input id="p-suche" placeholder="Nick oder Platz suchen …" style="max-width:240px">
           <span class="leise klein" id="p-stand"></span>
         </div>
+        <div id="p-ausbau"></div>
         <div class="plan-info" id="p-info" aria-live="polite">${sitzKarte(null)}</div>
         <div class="plan-buehne" id="buehne"></div>
       </div>
@@ -56,6 +57,18 @@ export async function render(main, param) {
     $("#p-stand", main).textContent = `${zahl("frei")} frei · ${zahl("belegt")} belegt`;
   };
 
+  // Ausbaustufen: zeigen, wie viele Plätze jetzt buchbar sind und wie viele noch kommen.
+  const ausbauHinweis = () => {
+    const ziel = $("#p-ausbau", main);
+    const maxStufe = Math.max(1, ...daten.sitze.map((s) => s.stufe || 1));
+    if (!ziel || maxStufe <= 1) { if (ziel) ziel.innerHTML = ""; return; }
+    const aktiv = daten.lan.stufeAktiv || 1;
+    const jetzt = daten.sitze.filter((s) => !s.gesperrt && (s.stufe || 1) <= aktiv).length;
+    const gesamt = daten.sitze.filter((s) => !s.gesperrt).length;
+    ziel.innerHTML = `<div class="ausbau-hinweis"><div class="stufen-leiste">${Array.from({ length: maxStufe }, (_, i) => `<i class="${i < aktiv ? "an" : ""}"></i>`).join("")}</div>
+      <span><b>Ausbaustufe ${Math.min(aktiv, maxStufe)} von ${maxStufe}</b>: ${jetzt} Plätze buchbar.${aktiv < maxStufe ? ` Sind sie vergeben, schalten wir weitere frei – bis zu ${gesamt} Plätze.` : ""}</span></div>`;
+  };
+
   const seiteZeichnen = () => {
     const t = ich && ich.ticket;
     let meinTeil;
@@ -70,7 +83,8 @@ export async function render(main, param) {
     else meinTeil = `<div class="karte glanz"><h3>Dein Platz</h3>${t.sitz ? `<div class="gross-sitz">${esc(t.sitz)}</div><p class="leise klein">Klicke einen anderen freien Platz an, um zu wechseln.</p>
       ${t.checkinAt ? "" : `<button class="knopf klein geist" data-freigeben>Platz freigeben</button>`}` : `<p>Du hast noch keinen Platz. Klicke einen <b class="gruen">grünen</b> Platz an.</p>`}
       ${ich.gruppe ? `<p class="klein leise" style="margin-top:10px">Gruppe <b>${esc(ich.gruppe.name)}</b>: lila umrandete Plätze sind für euch.${ich.gruppe.istLeitung ? ` <a href="#/sitzplan/~gruppe">Plätze vormerken</a>` : ""}</p>` : ""}</div>`;
-    $("#seite", main).innerHTML = meinTeil + `<div class="karte"><h3>Legende</h3>${legendeHtml()}</div>`;
+    $("#seite", main).innerHTML = meinTeil + `<div class="karte"><h3>Legende</h3>${legendeHtml(daten.sitze.some((s) => s.status === "ausbau"))}</div>`;
+    ausbauHinweis();
     const fr = $("[data-freigeben]", main);
     if (fr) fr.onclick = () => mitSperre(fr, async () => { await api("sitzFreigeben"); await neuLaden(); ich = zustand.ich; daten = await api("sitzplan"); zeichnen(); toast("Platz freigegeben."); });
     const gs = $("[data-gruppe-speichern]", main);
@@ -102,6 +116,7 @@ export async function render(main, param) {
     const t = ich.ticket;
     if (!t || !t.typ.mitSitz || s.meins) return;
     if (t.status !== "bezahlt") { toast("Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat."); return; }
+    if (s.status === "ausbau") { toast("Platz " + s.label + " wird erst mit Ausbaustufe " + (s.stufe || 2) + " freigeschaltet."); return; }
     const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe);
     if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : "Platz " + s.label + " ist nicht frei."); return; }
     if (t.checkinAt) { toast("Nach dem Check-in ändert nur die Orga deinen Platz."); return; }

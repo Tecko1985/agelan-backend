@@ -115,6 +115,9 @@ const MIGRATIONEN = [
   "ALTER TABLE users ADD COLUMN streamer INTEGER NOT NULL DEFAULT 0",   // darf sich im Streamplan eintragen
   "ALTER TABLE seats ADD COLUMN orga INTEGER NOT NULL DEFAULT 0",       // früher „für die Orga reserviert“ – abgeschafft
   "UPDATE seats SET gesperrt = 1, orga = 0 WHERE orga = 1",             // alte Orga-Plätze bleiben für Gäste zu (jetzt gesperrt)
+  "ALTER TABLE seats ADD COLUMN stufe INTEGER NOT NULL DEFAULT 1",      // Ausbaustufe des Platzes (1 = immer da)
+  "ALTER TABLE lans ADD COLUMN stufe_aktiv INTEGER NOT NULL DEFAULT 1", // bis zu dieser Ausbaustufe sind Plätze buchbar
+  "ALTER TABLE lans ADD COLUMN stufe_auto INTEGER NOT NULL DEFAULT 1",  // nächste Stufe automatisch, wenn die aktive ausverkauft ist
   "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
 ];
@@ -530,7 +533,7 @@ async function zahlen(env, lan) {
 function zahlenAbfragen(lanId) {
   const [w, p] = lanBed(lanId);
   return [
-    [`SELECT COUNT(*) AS n FROM seats WHERE lan_id = ${w} AND gesperrt = 0`, ...p],
+    [`SELECT COUNT(*) AS n FROM seats WHERE lan_id = ${w} AND gesperrt = 0 AND stufe <= (SELECT stufe_aktiv FROM lans WHERE id = ${w})`, ...p, ...p],
     [`SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id LEFT JOIN seats s ON s.id = t.seat_id
       WHERE t.lan_id = ${w} AND t.status != 'storniert' AND tt.mit_sitz = 1 AND COALESCE(s.gesperrt, 0) = 0`, ...p],
     [`SELECT COUNT(*) AS n, SUM(status = 'bezahlt') AS bezahlt FROM tickets WHERE lan_id = ${w} AND status != 'storniert'`, ...p],
@@ -642,6 +645,7 @@ const AKTIONEN = {
         // Plätze gibt es erst nach der Zahlung – setzt die Orga einen Unbezahlten, ist der Platz trotzdem „belegt“.
         if (s.t_status) status = "belegt";
         else if (s.gesperrt) status = "gesperrt";
+        else if ((s.stufe || 1) > (lan.stufe_aktiv || 1)) status = "ausbau";
         else if (gruppeAktiv) status = "gruppe";
         const gruppeId = s.t_status ? s.t_group : (gruppeAktiv ? s.group_id : null);
         return {
@@ -650,6 +654,7 @@ const AKTIONEN = {
           gruppe: s.t_status ? (namenZeigen ? s.tg_name || "" : "") : (gruppeAktiv ? s.g_name : ""),
           gruppenSitz: !!gruppeAktiv,
           gesperrt: !!s.gesperrt,
+          stufe: s.stufe || 1,
           meins: !!(c.ich && s.t_user === c.ich.id),
           meineGruppe: !!(meineGruppe && (gruppeId === meineGruppe || (gruppeAktiv && s.group_id === meineGruppe))),
         };
@@ -826,15 +831,17 @@ const AKTIONEN = {
       SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       WHERE (? = 0 OR (SELECT COUNT(*) FROM tickets WHERE type_id = ? AND status != 'storniert') < ?)
         AND (? = 0 OR (SELECT COUNT(*) FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert')
-                      < MIN((SELECT COUNT(*) FROM seats WHERE lan_id = ? AND gesperrt = 0), ?))
+                      < MIN((SELECT COUNT(*) FROM seats WHERE lan_id = ? AND gesperrt = 0
+                               AND stufe <= (SELECT CASE WHEN stufe_auto = 1 THEN 99 ELSE stufe_aktiv END FROM lans WHERE id = ?)), ?))
         AND (? IS NULL OR (SELECT COUNT(*) FROM tickets WHERE coupon_id = ? AND status != 'storniert') < (SELECT max_einloesungen FROM coupons WHERE id = ?))`,
       lan.id, u.id, typ.id, code, gratis ? "bezahlt" : "offen", zahlart, p.endCent, JSON.stringify(p.extras), p.couponId, p.rabattCent,
       text(body.notiz, 300, "Hinweis", false), jetzt, jetzt, gratis ? jetzt : null, gratis ? "gratis" : "",
       typ.limit_anzahl, typ.id, typ.limit_anzahl,
-      typ.mit_sitz, lan.id, lan.id, lan.gaeste_limit || 100000,
+      typ.mit_sitz, lan.id, lan.id, lan.id, lan.gaeste_limit || 100000,
       p.couponId, p.couponId, p.couponId);
     if (!geaendert(r)) throw new F(409, "Leider ausverkauft – oder der Gutschein ist schon aufgebraucht.");
     await protokoll(c, "ticket-gekauft", { typ: typ.name, zahlart, preis: p.endCent });
+    await stufeNachziehen(c, lan.id);
     return { ticket: await ticketDetail(env, r.meta.last_row_id) };
   },
 
@@ -971,6 +978,7 @@ const AKTIONEN = {
         LEFT JOIN tickets t ON t.seat_id = s.id LEFT JOIN groups g2 ON g2.id = s.group_id WHERE s.id = ? AND s.lan_id = ?`, id, g.lan_id);
       if (!s) throw new F(404, "Einen der Plätze gibt es nicht.");
       if (s.gesperrt) throw new F(409, "Platz " + s.label + " ist gesperrt.");
+      if ((s.stufe || 1) > ((glan && glan.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Ausbaustufe " + s.stufe + " freigeschaltet.");
       if (s.t_user && !mitglieder.includes(s.t_user)) throw new F(409, "Platz " + s.label + " ist schon belegt.");
       if (s.group_id && s.group_id !== g.id && s.g_ablauf > jetzt) throw new F(409, "Platz " + s.label + " ist von einer anderen Gruppe vorgemerkt.");
     }
@@ -1106,6 +1114,7 @@ const AKTIONEN = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`, lan.id, u.id, typ.id, hex(zufallsBytes(16)), bezahlt ? "bezahlt" : "offen", zahlart, preis, jetzt,
       bezahlt ? jetzt : null, bezahlt ? ich.nick : "", "Angelegt von " + ich.nick);
     await protokoll(c, "ticket-angelegt", { fuer: u.nick, typ: typ.name });
+    await stufeNachziehen(c, lan.id);
     return { ticket: await ticketDetail(env, r.meta.last_row_id) };
   },
 
@@ -1152,6 +1161,7 @@ const AKTIONEN = {
     }
     if (body.einchecken) await los(env, "UPDATE tickets SET checkin_at = ?, checkin_von = ?, otp = ? WHERE id = ?", jetzt, ich.nick, otpErzeugen(), ticketId);
     await protokoll(c, "gast-vor-ort", { nick, typ: typ.name, platz: sitzId || "", eingecheckt: !!body.einchecken });
+    await stufeNachziehen(c, lan.id);
     return { ticket: await ticketDetail(env, ticketId), passwort };
   },
 
@@ -1351,7 +1361,7 @@ const AKTIONEN = {
       const stmts = [];
       if (planQuelle !== "aktiv") stmts.push(...(await vorlageStatements(env, id, planQuelle)));
       else for (const s of await alle(env, "SELECT * FROM seats WHERE lan_id = ?", vorlage.id)) {
-        stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt) VALUES (?,?,?,?,?,?)", zufallsId(), id, s.label, s.x, s.y, s.gesperrt || s.orga ? 1 : 0));
+        stmts.push(st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, stufe) VALUES (?,?,?,?,?,?,?)", zufallsId(), id, s.label, s.x, s.y, s.gesperrt || s.orga ? 1 : 0, s.stufe || 1));
       }
       for (const t of await alle(env, "SELECT * FROM ticket_types WHERE lan_id = ?", vorlage.id)) {
         stmts.push(st(env, "INSERT INTO ticket_types (lan_id, sort, name, beschreibung, features, preis_cent, extras, mit_sitz, aktiv, kaufbar, limit_anzahl) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -1410,6 +1420,30 @@ const AKTIONEN = {
     return { ok: true, geaendert: stmts.length };
   },
 
+  // ---------- Verwaltung: Ausbaustufen ----------
+  // sitze: [{id, stufe}] (1–9), aktiv: bis zu welcher Stufe Plätze buchbar sind.
+  async adminStufenSpeichern(c) {
+    const { env, body } = c;
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const stmts = [];
+    for (const z of (Array.isArray(body.sitze) ? body.sitze : []).slice(0, 3000)) {
+      const stufe = Math.round(Number(z.stufe));
+      if (!(stufe >= 1 && stufe <= 9)) throw new F(400, "Ausbaustufe muss zwischen 1 und 9 liegen.");
+      stmts.push(st(env, "UPDATE seats SET stufe = ? WHERE id = ? AND lan_id = ?", stufe, String(z.id), lan.id));
+    }
+    if (body.aktiv != null) {
+      const aktiv = Math.round(Number(body.aktiv));
+      if (!(aktiv >= 1 && aktiv <= 9)) throw new F(400, "Aktive Stufe muss zwischen 1 und 9 liegen.");
+      stmts.push(st(env, "UPDATE lans SET stufe_aktiv = ? WHERE id = ?", aktiv, lan.id));
+    }
+    if (body.auto != null) stmts.push(st(env, "UPDATE lans SET stufe_auto = ? WHERE id = ?", body.auto ? 1 : 0, lan.id));
+    if (stmts.length) await env.DB.batch(stmts);
+    await protokoll(c, "ausbaustufen", { lan: lan.id, plaetze: stmts.length, aktiv: body.aktiv, auto: body.auto });
+    const neu = await stufeNachziehen(c, lan.id);
+    return { ok: true, stufeAktiv: neu };
+  },
+
   // ---------- Verwaltung: Sitzplan-Vorlagen ----------
   async adminVorlagen(c) {
     brauchtAdmin(c);
@@ -1427,8 +1461,8 @@ const AKTIONEN = {
     const lan = await lanAusBody(c);
     const name = text(body.name, 60, "Name der Vorlage", true);
     const plan = parse((await eins(env, "SELECT value FROM settings WHERE key = ?", "plan:" + lan.id) || {}).value, null) || { breite: 20, hoehe: 20, deko: [] };
-    const sitze = (await alle(env, "SELECT label, x, y, gesperrt, orga FROM seats WHERE lan_id = ? ORDER BY y, x", lan.id))
-      .map((s) => ({ label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt || s.orga ? 1 : 0 }));
+    const sitze = (await alle(env, "SELECT label, x, y, gesperrt, orga, stufe FROM seats WHERE lan_id = ? ORDER BY y, x", lan.id))
+      .map((s) => ({ label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt || s.orga ? 1 : 0, stufe: s.stufe || 1 }));
     if (!sitze.length) throw new F(409, "Diese LAN hat noch keine Plätze.");
     const daten = JSON.stringify({ plan, sitze });
     const alt = await eins(env, "SELECT id FROM plan_vorlagen WHERE lower(name) = lower(?)", name);
@@ -1603,7 +1637,7 @@ const AKTIONEN = {
 // Bausteine für die Aktionen
 // ---------------------------------------------------------------------------
 function lanAus(l) {
-  return { id: l.id, name: l.name, start: l.start, ende: l.ende, gaesteLimit: l.gaeste_limit, verkaufOffen: !!l.verkauf_offen, ort: l.ort, adresse: l.adresse, beschreibung: l.beschreibung, aktiv: !!l.aktiv };
+  return { id: l.id, name: l.name, start: l.start, ende: l.ende, gaesteLimit: l.gaeste_limit, verkaufOffen: !!l.verkauf_offen, ort: l.ort, adresse: l.adresse, beschreibung: l.beschreibung, aktiv: !!l.aktiv, stufeAktiv: l.stufe_aktiv || 1, stufeAuto: l.stufe_auto == null ? true : !!l.stufe_auto };
 }
 
 function otpErzeugen() {
@@ -1769,16 +1803,43 @@ async function vorlageDaten(env, vorlageId) {
 async function vorlageStatements(env, lanId, vorlageId) {
   const daten = await vorlageDaten(env, vorlageId);
   // Ältere Vorlagen kennen noch „orga“ – das wird zu „gesperrt“.
-  const stmts = daten.sitze.map((s) => st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt) VALUES (?,?,?,?,?,?)",
-    zufallsId(), lanId, s.label, s.x, s.y, s.gesperrt || s.orga ? 1 : 0));
+  const stmts = daten.sitze.map((s) => st(env, "INSERT INTO seats (id, lan_id, label, x, y, gesperrt, stufe) VALUES (?,?,?,?,?,?,?)",
+    zufallsId(), lanId, s.label, s.x, s.y, s.gesperrt || s.orga ? 1 : 0, Math.max(1, Math.min(9, Number(s.stufe) || 1))));
   stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lanId, JSON.stringify(daten.plan)));
   return stmts;
+}
+
+// Automatische Ausbaustufe: Sind so viele Sitzplatz-Tickets verkauft, wie die aktive Stufe
+// Plätze hat, wird die nächste Stufe freigeschaltet (nur aufwärts, nie zurück).
+// Beispiel: Stufe 1 = 96 Plätze → mit dem 96. Ticket öffnet Stufe 2, der 97. Gast kann kaufen.
+async function stufeNachziehen(c, lanId) {
+  const env = c.env;
+  const [[l], stufen, [t]] = await lesen(env,
+    ["SELECT stufe_aktiv, stufe_auto FROM lans WHERE id = ?", lanId],
+    ["SELECT stufe, COUNT(*) AS n FROM seats WHERE lan_id = ? AND gesperrt = 0 GROUP BY stufe ORDER BY stufe", lanId],
+    [`SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id WHERE t.lan_id = ? AND tt.mit_sitz = 1 AND t.status != 'storniert'`, lanId]);
+  if (!l) return 1;
+  const alt = l.stufe_aktiv || 1;
+  if (!l.stufe_auto || !stufen.length) return alt;
+  const maxStufe = Math.max(...stufen.map((z) => z.stufe));
+  const plaetzeBis = (k) => stufen.filter((z) => z.stufe <= k).reduce((sum, z) => sum + z.n, 0);
+  let aktiv = alt;
+  while (aktiv < maxStufe && t.n >= plaetzeBis(aktiv)) aktiv++;
+  if (aktiv > alt) {
+    await los(env, "UPDATE lans SET stufe_aktiv = ? WHERE id = ?", aktiv, lanId);
+    await protokoll(c, "ausbaustufe-auto", { lan: lanId, von: alt, auf: aktiv, tickets: t.n });
+  }
+  return aktiv;
 }
 
 async function sitzSetzen(env, ticketId, userId, lanId, sitzId, durchOrga) {
   const s = await eins(env, `SELECT s.*, g.ablauf AS g_ablauf, g.name AS g_name FROM seats s LEFT JOIN groups g ON g.id = s.group_id WHERE s.id = ? AND s.lan_id = ?`, sitzId, lanId);
   if (!s) throw new F(404, "Diesen Platz gibt es nicht.");
   if (s.gesperrt && !durchOrga) throw new F(409, "Dieser Platz ist gesperrt.");
+  if (!durchOrga && (s.stufe || 1) > 1) {
+    const l = await eins(env, "SELECT stufe_aktiv FROM lans WHERE id = ?", lanId);
+    if ((s.stufe || 1) > ((l && l.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Ausbaustufe " + s.stufe + " freigeschaltet.");
+  }
   const belegt = await eins(env, "SELECT id FROM tickets WHERE seat_id = ?", sitzId);
   if (belegt && belegt.id !== ticketId) throw new F(409, "Platz " + s.label + " ist schon vergeben.");
   if (!durchOrga && s.group_id && s.g_ablauf > Date.now()) {

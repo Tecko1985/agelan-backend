@@ -363,6 +363,28 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .sitz.s-gesperrt rect { fill: #2a2a30; stroke: #444; }
 .sitz.s-gesperrt text { fill: #777; }
 .sitz.s-gesperrt { cursor: not-allowed; }
+.sitz.s-ausbau rect { fill: rgba(255, 255, 255, 0.02); stroke: #4a4b52; stroke-dasharray: 4 3; }
+.sitz.s-ausbau text { fill: #6c6b76; }
+.sitz.s-ausbau { cursor: not-allowed; }
+.l-ausbau { background: transparent; border: 2px dashed #6c6b76 !important; }
+.platz-karte.s-ausbau { border-left-color: #6c6b76; }
+.ausbau-hinweis { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; padding: 10px 14px; border: 1px solid var(--rand2); border-radius: var(--radius); background: rgba(232, 182, 76, 0.06); font-size: 0.92rem; }
+.ausbau-hinweis b { color: var(--gold2); }
+.stufen-leiste { display: flex; gap: 4px; }
+.stufen-leiste i { width: 26px; height: 8px; border-radius: 2px; background: #2a2b31; }
+.stufen-leiste i.an { background: var(--gold); }
+/* Konfigurator: Farbe je Ausbaustufe */
+.stufen-plan .sitz rect { stroke-width: 2; }
+.stufen-plan .sitz.st-1 rect { fill: #2a7d4b; stroke: #49d483; }
+.stufen-plan .sitz.st-2 rect { fill: #1f4f9c; stroke: #6aa8ff; }
+.stufen-plan .sitz.st-3 rect { fill: #6b2f9c; stroke: #b583ff; }
+.stufen-plan .sitz.st-4 rect { fill: #9c5a1f; stroke: #ffb46a; }
+.stufen-plan .sitz.st-5 rect, .stufen-plan .sitz.st-6 rect, .stufen-plan .sitz.st-7 rect, .stufen-plan .sitz.st-8 rect, .stufen-plan .sitz.st-9 rect { fill: #7a1f4a; stroke: #ff6fae; }
+.stufen-plan .sitz text { fill: #fff; }
+.stufen-plan .sitz.inaktiv rect { stroke-dasharray: 4 3; opacity: 0.55; }
+.stufe-knopf { border-left-width: 4px !important; }
+.stufe-knopf.st-1 { border-left-color: #49d483 !important; } .stufe-knopf.st-2 { border-left-color: #6aa8ff !important; }
+.stufe-knopf.st-3 { border-left-color: #b583ff !important; } .stufe-knopf.st-4 { border-left-color: #ffb46a !important; }
 .sitz.meinegruppe rect { stroke: var(--lila); stroke-width: 3; }
 .sitz.meins rect { fill: var(--pink); stroke: #fff; stroke-width: 3; }
 .sitz.meins text { fill: #2a0016; }
