@@ -128,6 +128,7 @@ const MIGRATIONEN = [
   "ALTER TABLE lans ADD COLUMN stufe_auto INTEGER NOT NULL DEFAULT 1",  // nächste Stufe automatisch, wenn die aktive ausverkauft ist
   "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
+  "UPDATE users SET rolle = 'user' WHERE rolle = 'orga'",                // nur noch Gast und Orga (= admin)
   "ALTER TABLE tickets ADD COLUMN paypal_order TEXT NOT NULL DEFAULT ''",   // PayPal-Bestellung (Checkout) zum Ticket
   "ALTER TABLE tickets ADD COLUMN paypal_capture TEXT NOT NULL DEFAULT ''", // PayPal-Transaktions-ID nach erfolgreicher Zahlung
 ];
@@ -430,7 +431,7 @@ function registrierungZaehlen(ip) {
 // ---------------------------------------------------------------------------
 function brauchtLogin(c) { if (!c.ich) throw new F(401, "Bitte melde dich an."); return c.ich; }
 function brauchtOrga(c) { const u = brauchtLogin(c); if (u.rolle !== "orga" && u.rolle !== "admin") throw new F(403, "Nur für die Orga."); return u; }
-function brauchtAdmin(c) { const u = brauchtLogin(c); if (u.rolle !== "admin") throw new F(403, "Nur für Veranstalter."); return u; }
+function brauchtAdmin(c) { const u = brauchtLogin(c); if (u.rolle !== "admin") throw new F(403, "Nur für die Orga."); return u; }
 
 function text(v, max, feld, pflicht) {
   const s = String(v == null ? "" : v).trim();
@@ -858,7 +859,7 @@ const AKTIONEN = {
     const u = brauchtLogin(c);
     if (!c.env.ADMIN_SETUP) throw new F(500, "Secret ADMIN_SETUP fehlt.");
     // Nur zur Ersteinrichtung: Gibt es schon einen Veranstalter, vergibt der die Rolle unter Verwaltung → Benutzer.
-    if (await eins(c.env, "SELECT 1 AS x FROM users WHERE rolle = 'admin' LIMIT 1")) throw new F(403, "Es gibt schon einen Veranstalter. Die Rolle vergibt ein Veranstalter unter Verwaltung → Benutzer.");
+    if (await eins(c.env, "SELECT 1 AS x FROM users WHERE rolle = 'admin' LIMIT 1")) throw new F(403, "Es gibt schon eine Orga. Die Rolle vergibt die Orga unter Verwaltung → Benutzer.");
     if (!bremseOffen(c.ip)) throw new F(429, "Zu viele Fehlversuche.");
     if (!(await gleich(String(c.body.passwort || ""), c.env.ADMIN_SETUP))) { bremseFehlschlag(c.ip); throw new F(403, "Falsches Passwort."); }
     await los(c.env, "UPDATE users SET rolle = 'admin' WHERE id = ?", u.id);
@@ -1248,7 +1249,7 @@ const AKTIONEN = {
     // Orga darf Notiz und Zahlart ändern, alles andere nur Veranstalter.
     const ich = brauchtOrga(c);
     const nurOrgaFelder = ["typId", "preisCent", "sitzId", "status", "otpNeu"].every((k) => body[k] === undefined);
-    if (ich.rolle !== "admin" && !nurOrgaFelder) throw new F(403, "Nur für Veranstalter.");
+    if (ich.rolle !== "admin" && !nurOrgaFelder) throw new F(403, "Nur für die Orga.");
     const t = await eins(env, "SELECT * FROM tickets WHERE id = ?", Number(body.ticketId));
     if (!t) throw new F(404, "Ticket nicht gefunden.");
     if (body.zahlart !== undefined) {
@@ -1752,7 +1753,7 @@ const AKTIONEN = {
     if (!u) throw new F(404, "Konto nicht gefunden.");
     if (body.rolle) {
       if (!ROLLEN.includes(body.rolle)) throw new F(400, "Unbekannte Rolle.");
-      if (u.id === ich.id && body.rolle !== "admin") throw new F(400, "Du kannst dir die Veranstalter-Rolle nicht selbst nehmen.");
+      if (u.id === ich.id && body.rolle !== "admin") throw new F(400, "Du kannst dir die Orga-Rolle nicht selbst nehmen.");
       await los(env, "UPDATE users SET rolle = ? WHERE id = ?", body.rolle, u.id);
     }
     if (body.streamer != null) await los(env, "UPDATE users SET streamer = ? WHERE id = ?", body.streamer ? 1 : 0, u.id);
@@ -1777,7 +1778,7 @@ const AKTIONEN = {
     const u = await eins(env, "SELECT * FROM users WHERE id = ?", Number(body.userId));
     if (!u) throw new F(404, "Konto nicht gefunden.");
     if (u.id === ich.id) throw new F(400, "Du kannst dein eigenes Konto nicht löschen.");
-    if (u.rolle === "admin") throw new F(409, "Veranstalter-Konten lassen sich nicht löschen – erst die Rolle ändern.");
+    if (u.rolle === "admin") throw new F(409, "Orga-Konten lassen sich nicht löschen – erst die Rolle auf Gast ändern.");
     const tickets = await alle(env, `SELECT t.status, t.paypal_capture, l.name AS lan FROM tickets t JOIN lans l ON l.id = t.lan_id WHERE t.user_id = ?`, u.id);
     const gueltig = tickets.filter((t) => t.status !== "storniert");
     if (gueltig.length) throw new F(409, `${u.nick} hat noch ein Ticket (${[...new Set(gueltig.map((t) => t.lan))].join(", ")}). Erst das Ticket stornieren, dann löschen.`);

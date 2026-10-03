@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=62";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=62";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=62";
+import { api, tokenSetzen } from "./api.js?v=64";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=64";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=64";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -209,9 +209,9 @@ export async function render(main) {
         <div class="karte"><h3>Meine Daten</h3>
           <dl class="daten-liste"><dt>Name</dt><dd>${esc(u.vorname)} ${esc(u.nachname)}</dd><dt>E-Mail</dt><dd>${esc(u.email)}</dd>
           <dt>Geburtstag</dt><dd>${esc(u.geburtsdatum)}</dd>${u.discord ? `<dt>Discord</dt><dd>${esc(u.discord)}</dd>` : ""}
-          ${u.rolle !== "user" ? `<dt>Rolle</dt><dd><span class="abzeichen gold">${u.rolle === "admin" ? "Veranstalter" : "Orga"}</span></dd>` : ""}</dl>
+          ${u.rolle !== "user" ? `<dt>Rolle</dt><dd><span class="abzeichen gold">Orga</span></dd>` : ""}</dl>
           <div class="zeile" style="margin-top:14px"><button class="knopf klein" data-daten>Daten ändern</button>
-          ${u.rolle !== "admin" && zustand.ich.ersteinrichtung ? `<button class="knopf klein geist" data-veranstalter>Veranstalter werden</button>` : ""}</div></div>
+          ${u.rolle !== "admin" && zustand.ich.ersteinrichtung ? `<button class="knopf klein geist" data-veranstalter>Orga werden</button>` : ""}</div></div>
       </div>
     </div>${ticketUnten}</div>`;
 
@@ -246,11 +246,11 @@ export async function render(main) {
   $("[data-daten]", main).onclick = () => datenDialog(u, main);
   const ver = $("[data-veranstalter]", main);
   if (ver) ver.onclick = () => {
-    const m = modal("Veranstalter werden", `<form class="formular"><p class="leise">Mit dem Veranstalter-Passwort wird dein Konto zum Veranstalter-Konto.</p>
-      <label class="feld"><span>Veranstalter-Passwort</span><input name="pw" type="password"></label><div class="fehler-text"></div><button class="knopf primaer">Freischalten</button></form>`);
+    const m = modal("Orga werden", `<form class="formular"><p class="leise">Ersteinrichtung: Mit dem Einrichtungs-Passwort wird dein Konto zum Orga-Konto.</p>
+      <label class="feld"><span>Einrichtungs-Passwort</span><input name="pw" type="password"></label><div class="fehler-text"></div><button class="knopf primaer">Freischalten</button></form>`);
     const f = $("form", m.el);
     f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
-      try { await api("veranstalterWerden", { passwort: f.pw.value }); m.schliessen(); toast("Du bist jetzt Veranstalter.", "ok"); render(main); } catch (err) { $(".fehler-text", f).textContent = err.message; }
+      try { await api("veranstalterWerden", { passwort: f.pw.value }); m.schliessen(); toast("Du bist jetzt Orga.", "ok"); render(main); } catch (err) { $(".fehler-text", f).textContent = err.message; }
     }); };
   };
   gruppeVerdrahten(main, g);

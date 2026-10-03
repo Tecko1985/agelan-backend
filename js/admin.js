@@ -1,16 +1,16 @@
-// Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=62";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=62";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=62";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=62";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=62";
+// Verwaltung für die Orga (Rolle admin).
+import { api, istDemo } from "./api.js?v=64";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=64";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=64";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=64";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=64";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
   ["gaeste", "Gäste & Zahlungen", false],
   ["gruppen", "Reservierungsgruppen", false],
   ["netz", "Internet & Geräte", false],
-  ["-", "Veranstalter"],
+  ["-", "Einrichtung"],
   ["plan", "Sitzplan-Editor", true],
   ["tickettypen", "Ticketsorten", true],
   ["gutscheine", "Gutscheine", true],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=62");
+    const { ticketHtml } = await import("./konto.js?v=64");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -279,7 +279,7 @@ function gruppenRegelnHtml(e, lan) {
     <label class="check"><input type="checkbox" name="gruppeVerlaengern" ${e.gruppeVerlaengern !== false ? "checked" : ""} ${admin ? "" : "disabled"}> Erneutes Vormerken verlängert die Haltefrist (wieder um die Haltefrist)</label>
     <div class="zwei">${zahl("gruppeMaxTage", e.gruppeMaxTage ?? 60, 0, 3650, "Höchstdauer ab Gründung (Tage, 0 = keine)")}
       ${zahl("gruppeStichtagTage", Number.isFinite(stich) && stich >= 0 ? stich : "", 0, 365, `Spätestens … Tage vor LAN-Beginn (leer = aus)${lan && lan.start ? "" : " – LAN hat noch keinen Termin"}`)}</div>
-    <p class="klein leise" style="margin:0">Abgelaufene Gruppen geben ihre vorgemerkten Plätze frei; Mitglieder mit Ticket behalten ihren eigenen Platz. Veranstalter können einzelne Fristen unten per Datum ändern.</p>
+    <p class="klein leise" style="margin:0">Abgelaufene Gruppen geben ihre vorgemerkten Plätze frei; Mitglieder mit Ticket behalten ihren eigenen Platz. Die Orga kann einzelne Fristen unten per Datum ändern.</p>
     ${admin ? `<div class="zeile"><button class="knopf primaer">Regeln speichern</button><button type="button" class="knopf" data-fristen>Auf bestehende Gruppen anwenden</button></div>` : ""}</form>`;
 }
 
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=62");
+  planModul = await import("./planeditor.js?v=64");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=62");
+    const { ticketHtml } = await import("./konto.js?v=64");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -1013,12 +1013,12 @@ async function benutzer(box) {
     $("#b-liste", box).innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
       <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}${u.vorOrt ? ` <span class="abzeichen" title="An der Tür von der Orga angelegt">vor Ort</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email.endsWith("@vor-ort.invalid") ? "–" : u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
-      <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["orga", "Orga"], ["admin", "Veranstalter"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["admin", "Orga"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       <td><input type="checkbox" data-streamer="${u.id}" ${u.streamer ? "checked" : ""}></td>
       <td style="white-space:nowrap"><button class="knopf klein" data-pw="${u.id}">Passwort neu</button> <button class="knopf klein geist" data-sperren="${u.id}">${u.gesperrt ? "Entsperren" : "Sperren"}</button>${u.rolle !== "admin" ? ` <button class="knopf klein rot" data-loeschen="${u.id}">Löschen</button>` : ""}</td></tr>`).join("");
     $$("[data-rolle]", box).forEach((s) => (s.onchange = async () => {
       const ziel = bs.find((u) => u.id === Number(s.dataset.rolle));
-      if (s.value === "admin" && !(await bestaetigen(`${ziel.nick} zum Veranstalter machen? Veranstalter haben vollen Zugriff auf alles – auch auf Zahlungen, Einstellungen und Konten.`, { ja: "Veranstalter machen", gefahr: true }))) { s.value = ziel.rolle; return; }
+      if (s.value === "admin" && !(await bestaetigen(`${ziel.nick} zur Orga machen? Die Orga hat vollen Zugriff auf alles – auch auf Zahlungen, Einstellungen und Konten.`, { ja: "Zur Orga machen", gefahr: true }))) { s.value = ziel.rolle; return; }
       try { await api("adminBenutzerAendern", { userId: Number(s.dataset.rolle), rolle: s.value }); bs.find((u) => u.id === Number(s.dataset.rolle)).rolle = s.value; toast("Rolle geändert.", "ok"); } catch (e) { fehler(e); zeichnen(); }
     }));
     $$("[data-streamer]", box).forEach((c) => (c.onchange = async () => {
