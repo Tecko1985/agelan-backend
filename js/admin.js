@@ -1,9 +1,9 @@
 // Verwaltung für die Orga (Rolle admin).
-import { api, istDemo } from "./api.js?v=64";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=64";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=64";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=64";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=64";
+import { api, istDemo } from "./api.js?v=65";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=65";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=65";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=65";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=65";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=64");
+    const { ticketHtml } = await import("./konto.js?v=65");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=64");
+  planModul = await import("./planeditor.js?v=65");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=64");
+    const { ticketHtml } = await import("./konto.js?v=65");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -955,7 +955,6 @@ async function einstellungen(box) {
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="netz"><h3>Internet-Zugang</h3>
       <p class="klein leise" style="margin:0">Steht nach dem Check-in auf dem Handy des Gastes. Das Passwort ist der 5-stellige Code, der beim Check-in erzeugt wird. Das Hallen-Portal prüft ihn bei uns und meldet das Gerät (MAC/IP) zurück.</p>
-      <div class="zwei"><label class="feld"><span>WLAN-Name (SSID)</span><input name="ssid" value="${esc(e.netz.ssid)}"></label><label class="feld"><span>WLAN-Passwort (leer = keins)</span><input name="wlanPasswort" value="${esc(e.netz.wlanPasswort)}"></label></div>
       <div class="zwei"><label class="feld"><span>Portal-Adresse (optional)</span><input name="portal" value="${esc(e.netz.portal)}" placeholder="http://login.lan"></label>
         <label class="feld"><span>Benutzername ist …</span><select name="benutzer"><option value="nick" ${e.netz.benutzer !== "code" ? "selected" : ""}>der Nickname</option><option value="code" ${e.netz.benutzer === "code" ? "selected" : ""}>die ersten 8 Zeichen des Ticket-Codes</option></select></label></div>
       <label class="feld"><span>Hinweis für Gäste</span><input name="hinweis" value="${esc(e.netz.hinweis)}"></label>
@@ -983,7 +982,7 @@ async function einstellungen(box) {
   const sammeln = {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
     zahlung: (v) => [["zahlung", { arten: { paypal_direkt: v.a_paypal_direkt, paypal: false, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: z.paypal, paypalMe: z.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
-    netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
+    netz: (v) => [["netz", { ssid: "", wlanPasswort: "", portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
     optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],
     faq: (v) => [["faq", v.t.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [f, ...a] = b.split("\n"); return { f: f.trim(), a: a.join("\n").trim() }; })]],

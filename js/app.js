@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=64";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl, drucken } from "./ui.js?v=64";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=65";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl, drucken } from "./ui.js?v=65";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=64")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=65")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -97,11 +97,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=64")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=64")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=64")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=64")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=64")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=65")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=65")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=65")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=65")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=65")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -187,7 +187,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=64");
+    const konto = await import("./konto.js?v=65");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -229,7 +229,7 @@ function lanZentraleHtml(ich) {
     <div class="lz-raster">
       <div class="lz-kacheln">${APP_KACHELN.map(([b, titel, text, ico]) => `<a class="app-kachel" href="#/app/${b}"><span class="ico">${ico}</span><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
       <div class="lz-netz"><h3>🌐 Internet</h3>
-        ${feld("WLAN", z.ssid)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
+        ${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
         ${sichereUrl(z.portal) ? `<a class="knopf klein primaer" href="${esc(sichereUrl(z.portal))}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}</div>
     </div></div></section>`;
 }

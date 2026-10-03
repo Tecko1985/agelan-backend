@@ -165,7 +165,7 @@ const STANDARD = {
   ],
   texte: { anfahrt: "", impressum: "", datenschutz: "", agb: "" },
   // Internet-Zugang: steht nach dem Check-in auf dem Handy des Gastes (Ticket-QR bzw. Konto).
-  netz: { ssid: "", wlanPasswort: "", portal: "", benutzer: "nick", hinweis: "Verbinde dich mit dem Netz und melde dich im Portal mit diesen Daten an.", maxGeraete: 3, aufbewahrungTage: 30 },
+  netz: { ssid: "", wlanPasswort: "", portal: "", benutzer: "nick", hinweis: "Steck dein Netzwerkkabel ein, öffne das Anmelde-Portal und melde dich mit diesen Daten an.", maxGeraete: 3, aufbewahrungTage: 30 },
   sponsoren: [],
   gaesteOeffentlich: true,
   sitzwahlOffen: true,

@@ -143,7 +143,7 @@ export function zugangHtml(z) {
     <button class="knopf klein geist" data-kopieren="${esc(wert)}">Kopieren</button></div>` : "";
   return `<div class="karte glanz zugang"><span class="ueberzeile">Du bist eingecheckt</span><h2 style="margin:0 0 6px">Dein Internet-Zugang</h2>
     <p class="leise klein">${esc(z.hinweis)}</p>
-    ${feld("WLAN", z.ssid, false)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
+    ${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
     <div class="zeile" style="margin-top:12px">${sichereUrl(z.portal) ? `<a class="knopf primaer" href="${esc(sichereUrl(z.portal))}" target="_blank" rel="noopener">Zum Anmelde-Portal</a>` : ""}
       <a class="knopf" href="#/app/essen">AgeLan-App öffnen (Essen, Turniere)</a></div>
     <p class="klein leise" style="margin:8px 0 0">In der App meldest du dich mit demselben Nickname und Passwort an.</p></div>`;
