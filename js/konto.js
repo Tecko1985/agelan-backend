@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=36";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=36";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=36";
+import { api, tokenSetzen } from "./api.js?v=37";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=37";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=37";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -175,7 +175,8 @@ export async function render(main) {
           ${t.status === "bezahlt" ? `<span class="abzeichen gruen">✓ Bezahlt</span>` : `<span class="abzeichen gold">Zahlung offen</span>`}</div>
         <div class="status-schritte">${schritte.map(([l, f], i) => `<div class="${f ? "fertig" : i === jetzt ? "jetzt" : ""}">${f ? "✓ " : ""}${l}</div>`).join("")}</div>
         ${t.status === "offen" ? zahlInfo(t, za, kurz) : ""}
-        ${t.typ.mitSitz && !t.sitz ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
+        ${t.typ.mitSitz && !t.sitz && t.status === "offen" ? `<p class="leise klein" style="margin-top:12px">Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat.</p>` : ""}
+        ${t.typ.mitSitz && !t.sitz && t.status === "bezahlt" ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
         ${t.sitz ? `<p style="margin-top:14px">Dein Platz: <a class="abzeichen gold" href="#/sitzplan/${encodeURIComponent(t.sitz)}">${esc(t.sitz)}</a> ${t.checkinAt ? "" : `<a class="klein" href="#/sitzplan" style="margin-left:6px">ändern</a>`}</p>` : ""}
         <a class="knopf klein geist" href="#/packliste" style="margin-top:14px">Packliste: Was brauche ich für die LAN?</a>
         ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
@@ -238,7 +239,7 @@ function zahlInfo(t, za, kurz) {
     wie = `<dl class="daten-liste"><dt>Empfänger</dt><dd>${esc(za.kontoinhaber || "–")}</dd><dt>IBAN</dt><dd class="mono">${esc(za.iban || "wird noch bekanntgegeben")}</dd>
       ${za.bank ? `<dt>Bank</dt><dd>${esc(za.bank)}</dd>` : ""}<dt>Betrag</dt><dd><b>${euro(t.preisCent)}</b></dd><dt>Verwendungszweck</dt><dd class="mono">${esc(t.nutzer.nick)} ${kurz}</dd></dl>`;
   } else {
-    wie = `<p>Du zahlst <b>${euro(t.preisCent)}</b> bar bei der Orga oder an der Abendkasse. Bis zur Zahlung ist dein Platz nur reserviert.</p>`;
+    wie = `<p>Du zahlst <b>${euro(t.preisCent)}</b> bar bei der Orga oder an der Abendkasse. Danach suchst du dir deinen Platz aus.</p>`;
   }
   const frist = za.fristTage ? new Date(t.createdAt + za.fristTage * 864e5).toLocaleDateString("de-DE") : "";
   return `<div class="karte" style="margin-top:12px;background:rgba(232,182,76,.06);border-color:var(--rand2)">

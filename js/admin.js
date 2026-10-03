@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=36";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=36";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=36";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=36";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=36";
+import { api, istDemo } from "./api.js?v=37";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=37";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=37";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=37";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=37";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=36");
+    const { ticketHtml } = await import("./konto.js?v=37");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=36");
+  planModul = await import("./planeditor.js?v=37");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -549,12 +549,12 @@ async function lans(box) {
     <div class="tabelle-wrap"><table><thead><tr><th>Name</th><th>Zeitraum</th><th>Verkauf</th><th class="zahl">Limit</th><th class="zahl">Gäste</th><th></th></tr></thead><tbody>
     ${ls.map((l) => `<tr><td><b>${esc(l.name)}</b> ${l.aktiv ? `<span class="abzeichen gold">aktiv</span>` : ""}</td><td>${esc(zeitraum(l.start, l.ende))}</td><td>${l.verkaufOffen ? "offen" : "zu"}</td>
       <td class="zahl">${l.gaesteLimit}</td><td class="zahl">${l.zahlen.gaeste} (${l.zahlen.bezahlt} bez.)</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-sitze="${l.id}">Plätze sperren / Orga</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button>${l.aktiv ? "" : ` <button class="knopf klein rot" data-lloeschen="${l.id}" title="LAN löschen">Löschen</button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-sitze="${l.id}">Plätze sperren</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button>${l.aktiv ? "" : ` <button class="knopf klein rot" data-lloeschen="${l.id}" title="LAN löschen">Löschen</button>`}</td></tr>`).join("")}
     </tbody></table></div><p class="klein leise" style="margin-top:8px">Die aktive LAN ist die, die auf der Website erscheint. Eine neue LAN übernimmt die Ticketsorten der aktiven; den Sitzplan wählst du beim Anlegen (wie die aktive LAN, aus einer Vorlage oder leer).</p>
     <div class="karte" style="margin-top:18px"><h3>Sitzplan-Vorlagen</h3>
-      <p class="klein leise" style="margin:0 0 10px">Eine Vorlage speichert Fläche, Beschriftungen und alle Plätze samt Sperren und Orga-Plätzen. Speichern: im LAN-Fenster unter „Sitzplan“.</p>
-      ${vorlagen.length ? `<div class="tabelle-wrap"><table><thead><tr><th>Name</th><th class="zahl">Plätze</th><th class="zahl">gesperrt</th><th class="zahl">Orga</th><th>Gespeichert</th><th></th></tr></thead><tbody>
-        ${vorlagen.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td class="zahl">${v.sitze}</td><td class="zahl">${v.gesperrt}</td><td class="zahl">${v.orga}</td><td class="klein leise">${esc(zeit(v.erstellt))}</td>
+      <p class="klein leise" style="margin:0 0 10px">Eine Vorlage speichert Fläche, Beschriftungen und alle Plätze samt Sperren. Speichern: im LAN-Fenster unter „Sitzplan“.</p>
+      ${vorlagen.length ? `<div class="tabelle-wrap"><table><thead><tr><th>Name</th><th class="zahl">Plätze</th><th class="zahl">gesperrt</th><th>Gespeichert</th><th></th></tr></thead><tbody>
+        ${vorlagen.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td class="zahl">${v.sitze}</td><td class="zahl">${v.gesperrt}</td><td class="klein leise">${esc(zeit(v.erstellt))}</td>
           <td><button class="knopf klein rot" data-vloeschen="${v.id}">Vorlage löschen</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="leise klein">Noch keine Vorlagen.</div>`}</div>`;
 
   const vorlagenOptionen = vorlagen.map((v) => `<option value="${v.id}">${esc(v.name)} (${v.sitze} Plätze)</option>`).join("");
@@ -573,7 +573,7 @@ async function lans(box) {
       <div class="zeile"><label class="check"><input type="checkbox" name="verkaufOffen" ${l.verkaufOffen ? "checked" : ""}> Ticketverkauf offen</label><label class="check"><input type="checkbox" name="aktiv" ${l.aktiv ? "checked" : ""}> Aktive LAN (auf der Website)</label></div>
       <div class="fehler-text"></div><button class="knopf primaer">Speichern</button></form>
       ${l.id ? `<div class="karte" style="margin-top:18px"><h3>Sitzplan</h3>
-        <div class="zeile"><button type="button" class="knopf" data-l-sitze>Plätze sperren / für Orga reservieren</button><button type="button" class="knopf" data-l-editor>Im Sitzplan-Editor öffnen</button></div>
+        <div class="zeile"><button type="button" class="knopf" data-l-sitze>Plätze sperren</button><button type="button" class="knopf" data-l-editor>Im Sitzplan-Editor öffnen</button></div>
         <div class="zeile" style="margin-top:12px;align-items:flex-end">
           <label class="feld" style="flex:1;min-width:180px;margin:0"><span>Als Vorlage speichern</span><input data-v-name placeholder="Name, z. B. Nordhessenhalle 120"></label>
           <button type="button" class="knopf" data-v-speichern>Speichern</button></div>
@@ -630,32 +630,32 @@ async function lans(box) {
   }));
 }
 
-// Plätze einer LAN sperren oder für die Orga reservieren. Werkzeug wählen, dann
+// Plätze einer LAN sperren oder freigeben. Werkzeug wählen, dann
 // Plätze anklicken (mit der Maus auch über mehrere ziehen) oder ganze Reihen.
 async function sitzStatusBearbeiten(l) {
   const daten = await api("sitzplan", { lanId: l.id });
-  const merkmal = new Map(daten.sitze.map((s) => [s.id, s.gesperrt || s.status === "gesperrt" ? "gesperrt" : s.orga ? "orga" : "frei"]));
+  const merkmal = new Map(daten.sitze.map((s) => [s.id, s.gesperrt || s.status === "gesperrt" ? "gesperrt" : "frei"]));
   const vorher = new Map(merkmal);
-  const vergeben = (s) => s.status === "belegt" || s.status === "reserviert";
+  const vergeben = (s) => s.status === "belegt";
   const reihe = (s) => (s.label.match(/^[^\d]+/) || [s.label])[0];
   let werkzeug = "gesperrt";
   const m = modal("Plätze: " + l.name, `<div class="stapel">
     <div class="zeile" style="gap:6px">
-      <button class="knopf klein" data-w="gesperrt">Sperren</button><button class="knopf klein" data-w="orga">Für Orga reservieren</button><button class="knopf klein" data-w="frei">Freigeben</button>
+      <button class="knopf klein" data-w="gesperrt">Sperren</button><button class="knopf klein" data-w="frei">Freigeben</button>
       <label class="check klein" style="margin-left:6px"><input type="checkbox" data-reihe> ganze Reihe</label>
       <span style="flex:1"></span><button class="knopf klein" data-z="-1" title="Verkleinern">−</button><button class="knopf klein" data-z="1" title="Vergrößern">+</button></div>
     <div class="klein" id="ss-info"></div>
     <div class="plan-buehne" id="ss-buehne" style="max-height:60vh;max-height:60dvh"></div>
-    <p class="klein leise" style="margin:0">Gesperrte Plätze kann niemand buchen. Orga-Plätze können nur Orga und Veranstalter nehmen oder im Ticket-Dialog vergeben; sie zählen nicht als freie Plätze. Plätze, auf denen schon ein Gast sitzt, behalten ihren Gast.</p>
+    <p class="klein leise" style="margin:0">Gesperrte Plätze kann kein Gast buchen und sie zählen nicht als freie Plätze. Im Ticket-Dialog kann die Orga sie trotzdem vergeben (z. B. für Orga-Mitglieder). Plätze, auf denen schon ein Gast sitzt, behalten ihren Gast.</p>
     <div class="zeile"><button class="knopf primaer" data-ok>Speichern</button><button class="knopf geist" data-ab>Abbrechen</button><span class="klein leise" id="ss-aend"></span></div></div>`, { breit: true });
   const buehne = $("#ss-buehne", m.el);
   let zoom = Math.min(1.4, Math.max(0.45, (buehne.clientWidth - 30) / (daten.plan.breite * U + 12)));
   const anzeige = (s) => (vergeben(s) ? s.status : merkmal.get(s.id));
   const klasse = (s) => `sitz s-${anzeige(s)}${vergeben(s) && merkmal.get(s.id) !== "frei" ? " markiert" : ""}`;
   const stand = () => {
-    const z = { gesperrt: 0, orga: 0 };
+    const z = { gesperrt: 0 };
     for (const v of merkmal.values()) if (z[v] !== undefined) z[v]++;
-    $("#ss-info", m.el).innerHTML = `${daten.sitze.length} Plätze · <b>${z.gesperrt}</b> gesperrt · <b>${z.orga}</b> für die Orga · ${daten.sitze.length - z.gesperrt - z.orga} buchbar`;
+    $("#ss-info", m.el).innerHTML = `${daten.sitze.length} Plätze · <b>${z.gesperrt}</b> gesperrt · ${daten.sitze.length - z.gesperrt} buchbar`;
     const n = [...merkmal].filter(([id, v]) => vorher.get(id) !== v).length;
     $("#ss-aend", m.el).textContent = n ? `${n} Änderung${n === 1 ? "" : "en"} nicht gespeichert` : "";
     $$("[data-w]", m.el).forEach((b) => b.classList.toggle("primaer", b.dataset.w === werkzeug));
@@ -799,7 +799,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=36");
+    const { ticketHtml } = await import("./konto.js?v=37");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -811,7 +811,7 @@ function gastZugangZeigen(r) {
 async function platzWaehlen(t, feld) {
   const daten = await api("sitzplan", { lanId: t.lanId });
   const sitze = daten.sitze.map((s) => ({ ...s, meins: false, meineGruppe: false }));
-  const waehlbar = (s) => s.id === t.sitzId || ["frei", "gruppe", "orga", "gesperrt"].includes(s.status);
+  const waehlbar = (s) => s.id === t.sitzId || ["frei", "gruppe", "gesperrt"].includes(s.status);
   let gewaehlt = sitze.find((s) => s.label.toLowerCase() === feld.value.trim().toLowerCase()) || null;
   const m = modal("Platz für " + t.nutzer.nick, `<div class="stapel">
     <div class="zeile zwischen" style="align-items:center"><div class="klein" id="pw-info"></div>
@@ -829,7 +829,7 @@ async function platzWaehlen(t, feld) {
     });
     const frei = sitze.filter((s) => s.status === "frei").length;
     info.innerHTML = gewaehlt && gewaehlt.id !== t.sitzId
-      ? `Gewählt: ${sitzInfo(gewaehlt)}${gewaehlt.status === "gruppe" ? ` <span class="gold">– der Gruppe wird der Platz damit genommen</span>` : ""}${gewaehlt.status === "gesperrt" ? ` <span class="gold">– Platz ist gesperrt</span>` : ""}${gewaehlt.status === "orga" ? ` <span class="gold">– Orga-Platz</span>` : ""}`
+      ? `Gewählt: ${sitzInfo(gewaehlt)}${gewaehlt.status === "gruppe" ? ` <span class="gold">– der Gruppe wird der Platz damit genommen</span>` : ""}${gewaehlt.status === "gesperrt" ? ` <span class="gold">– Platz ist gesperrt</span>` : ""}`
       : `Aktuell: <b>${esc(t.sitz || "kein Platz")}</b> · ${frei} Plätze frei. Klicke einen freien Platz an.`;
   };
   buehne.addEventListener("click", (e) => {

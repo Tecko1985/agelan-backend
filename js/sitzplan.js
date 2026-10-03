@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=36";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=36";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=36";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=36";
+import { api } from "./api.js?v=37";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=37";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=37";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=37";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
@@ -53,7 +53,7 @@ export async function render(main, param) {
     });
     seiteZeichnen();
     const zahl = (st) => daten.sitze.filter((s) => s.status === st).length;
-    $("#p-stand", main).textContent = `${zahl("frei")} frei · ${zahl("reserviert")} reserviert · ${zahl("belegt")} belegt`;
+    $("#p-stand", main).textContent = `${zahl("frei")} frei · ${zahl("belegt")} belegt`;
   };
 
   const seiteZeichnen = () => {
@@ -66,6 +66,7 @@ export async function render(main, param) {
         <div class="zeile"><button class="knopf primaer" data-gruppe-speichern>Vormerkung speichern</button><a class="knopf geist" href="#/konto">Fertig</a></div></div>`;
     } else if (!t) meinTeil = `<div class="karte"><h3>Noch kein Ticket</h3><p class="leise klein">Ohne Ticket kannst du dir noch keinen Platz aussuchen.</p><a class="knopf primaer" href="#/tickets">Ticket kaufen</a></div>`;
     else if (!t.typ.mitSitz) meinTeil = `<div class="karte"><h3>Gäste-Ticket</h3><p class="leise klein">Dein Ticket hat keinen PC-Platz.</p></div>`;
+    else if (t.status !== "bezahlt" && !t.sitz) meinTeil = `<div class="karte"><h3>Zahlung noch offen</h3><p class="leise klein">Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat. Wie du bezahlst, steht in deinem Konto.</p><a class="knopf" href="#/konto">Zum Konto</a></div>`;
     else meinTeil = `<div class="karte glanz"><h3>Dein Platz</h3>${t.sitz ? `<div class="gross-sitz">${esc(t.sitz)}</div><p class="leise klein">Klicke einen anderen freien Platz an, um zu wechseln.</p>
       ${t.checkinAt ? "" : `<button class="knopf klein geist" data-freigeben>Platz freigeben</button>`}` : `<p>Du hast noch keinen Platz. Klicke einen <b class="gruen">grünen</b> Platz an.</p>`}
       ${ich.gruppe ? `<p class="klein leise" style="margin-top:10px">Gruppe <b>${esc(ich.gruppe.name)}</b>: lila umrandete Plätze sind für euch.${ich.gruppe.istLeitung ? ` <a href="#/sitzplan/~gruppe">Plätze vormerken</a>` : ""}</p>` : ""}</div>`;
@@ -90,7 +91,7 @@ export async function render(main, param) {
     if (gruppenModus) {
       if (auswahl.has(s.id)) auswahl.delete(s.id);
       else {
-        const frei = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe) || ((s.status === "belegt" || s.status === "reserviert") && s.meineGruppe);
+        const frei = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe) || (s.status === "belegt" && s.meineGruppe);
         if (!frei) { toast("Platz " + s.label + " ist nicht frei."); return; }
         if (auswahl.size >= maxSitze) { toast("Höchstens " + maxSitze + " Plätze."); return; }
         auswahl.add(s.id);
@@ -100,9 +101,9 @@ export async function render(main, param) {
     }
     const t = ich.ticket;
     if (!t || !t.typ.mitSitz || s.meins) return;
-    const istOrga = ["orga", "admin"].includes(ich.nutzer.rolle);
-    const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe) || (s.status === "orga" && istOrga);
-    if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : s.status === "orga" ? "Platz " + s.label + " ist für die Orga reserviert." : "Platz " + s.label + " ist nicht frei."); return; }
+    if (t.status !== "bezahlt") { toast("Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat."); return; }
+    const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe);
+    if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : "Platz " + s.label + " ist nicht frei."); return; }
     if (t.checkinAt) { toast("Nach dem Check-in ändert nur die Orga deinen Platz."); return; }
     if (!(await bestaetigen(t.sitz ? `Von ${t.sitz} auf Platz ${s.label} wechseln?` : `Platz ${s.label} nehmen?`, { ja: "Ja, Platz nehmen" }))) return;
     try {

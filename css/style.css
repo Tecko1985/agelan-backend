@@ -332,10 +332,8 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .platz-karte { display: flex; align-items: center; gap: 16px; min-height: 78px; padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--rand); border-left: 4px solid var(--rand2); background: var(--karte); }
 .platz-karte.leer { border-left-color: var(--rand); font-size: 0.92rem; }
 .platz-karte.s-frei { border-left-color: #49d483; }
-.platz-karte.s-reserviert { border-left-color: var(--gold2); }
 .platz-karte.s-belegt { border-left-color: #ff6d76; }
 .platz-karte.s-gruppe { border-left-color: #6aa8ff; }
-.platz-karte.s-orga { border-left-color: #3fd0c9; }
 .platz-karte.s-gesperrt { border-left-color: #555; }
 .platz-karte.meins { border-left-color: var(--pink); }
 .pk-sitz { flex: none; min-width: 64px; padding: 6px 10px; text-align: center; font: 600 2rem/1 var(--serif); color: var(--gold2); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--rand); border-radius: var(--radius); }
@@ -358,13 +356,10 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .sitz text { font: 600 8.5px var(--sans); pointer-events: none; fill: rgba(0, 0, 0, 0.75); }
 .sitz.s-frei rect { fill: #2a7d4b; stroke: #49d483; }
 .sitz.s-frei text { fill: #d9ffe8; }
-.sitz.s-reserviert rect { fill: #a57a22; stroke: var(--gold2); }
 .sitz.s-belegt rect { fill: #8f1f27; stroke: #ff6d76; }
-.sitz.s-belegt text, .sitz.s-reserviert text { fill: #fff; }
+.sitz.s-belegt text { fill: #fff; }
 .sitz.s-gruppe rect { fill: #1f4f9c; stroke: #6aa8ff; }
 .sitz.s-gruppe text { fill: #e2eeff; }
-.sitz.s-orga rect { fill: #0f5f5c; stroke: #3fd0c9; }
-.sitz.s-orga text { fill: #dcfffd; }
 .sitz.s-gesperrt rect { fill: #2a2a30; stroke: #444; }
 .sitz.s-gesperrt text { fill: #777; }
 .sitz.s-gesperrt { cursor: not-allowed; }
@@ -385,12 +380,10 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .legende { display: grid; gap: 8px; font-size: 0.88rem; }
 .legende i { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; margin-right: 8px; border: 2px solid; }
 .l-frei { background: #2a7d4b; border-color: #49d483 !important; }
-.l-reserviert { background: #a57a22; border-color: var(--gold2) !important; }
 .l-belegt { background: #8f1f27; border-color: #ff6d76 !important; }
 .l-gruppe { background: #1f4f9c; border-color: #6aa8ff !important; }
 .l-meinegruppe { background: transparent; border-color: var(--lila) !important; }
 .l-meins { background: var(--pink); border-color: #fff !important; }
-.l-orga { background: #0f5f5c; border-color: #3fd0c9 !important; }
 .l-gesperrt { background: #2a2a30; border-color: #444 !important; }
 .plan-tooltip { position: fixed; z-index: 90; pointer-events: none; background: #000d; border: 1px solid var(--rand2); padding: 8px 11px; border-radius: 9px; font-size: 0.85rem; max-width: 240px; }
 

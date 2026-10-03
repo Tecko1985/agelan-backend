@@ -1,9 +1,9 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=36";
+import { esc } from "./ui.js?v=37";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
-const STATUS_TEXT = { frei: "Frei", reserviert: "Reserviert (Zahlung offen)", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", orga: "Für die Orga reserviert", gesperrt: "Gesperrt" };
+const STATUS_TEXT = { frei: "Frei", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", gesperrt: "Gesperrt" };
 
 export function dekoSvg(d, klasse = "") {
   const x = d.x * U, y = d.y * U, w = d.w * U, h = d.h * U;
@@ -42,11 +42,11 @@ export function sitzInfo(s) {
 }
 
 // Große Info-Karte über dem Plan: Platz, wer dort sitzt, Status, Gruppe.
-const STATUS_FARBE = { frei: "gruen", reserviert: "gold", belegt: "rot", gruppe: "blau", orga: "tuerkis", gesperrt: "" };
-const STATUS_KURZ = { frei: "Frei", reserviert: "Reserviert · Zahlung offen", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", orga: "Für die Orga reserviert", gesperrt: "Gesperrt" };
+const STATUS_FARBE = { frei: "gruen", belegt: "rot", gruppe: "blau", gesperrt: "" };
+const STATUS_KURZ = { frei: "Frei", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", gesperrt: "Gesperrt" };
 export function sitzKarte(s) {
   if (!s) return `<div class="platz-karte leer"><span class="leise">Fahre über einen Platz oder tippe ihn an – hier steht dann, wer dort sitzt.</span></div>`;
-  const wer = s.meins ? "Dein Platz" : s.nick || (s.status === "frei" ? "Noch frei" : s.status === "gruppe" ? "Vorgemerkt" : s.status === "orga" ? "Orga" : s.status === "gesperrt" ? "Nicht buchbar" : "Vergeben");
+  const wer = s.meins ? "Dein Platz" : s.nick || (s.status === "frei" ? "Noch frei" : s.status === "gruppe" ? "Vorgemerkt" : s.status === "gesperrt" ? "Nicht buchbar" : "Vergeben");
   return `<div class="platz-karte s-${esc(s.status || "frei")}${s.meins ? " meins" : ""}">
     <div class="pk-sitz">${esc(s.label)}</div>
     <div class="pk-text"><div class="pk-nick">${esc(wer)}</div>
@@ -73,6 +73,6 @@ export function tooltipAnbinden(container, sitzVonId) {
 
 export function legendeHtml() {
   return `<div class="legende">
-    <div><i class="l-frei"></i>Frei</div><div><i class="l-reserviert"></i>Reserviert (Zahlung offen)</div><div><i class="l-belegt"></i>Belegt</div>
-    <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-orga"></i>Für die Orga reserviert</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
+    <div><i class="l-frei"></i>Frei</div><div><i class="l-belegt"></i>Belegt</div>
+    <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
 }
