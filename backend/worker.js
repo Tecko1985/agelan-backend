@@ -15,6 +15,9 @@
 //   PORTAL_SECRET (Secret) = gemeinsames Geheimnis mit dem Anmeldeportal der
 //                            Halle (portal.lan). Ohne Secret ist die Aktion
 //                            portalAnmeldung gesperrt. Siehe pflege/portal-anbindung.md.
+//   PAYPAL_CLIENT_ID, PAYPAL_SECRET (Secrets) = REST-App aus developer.paypal.com.
+//   PAYPAL_MODE   (Var/Secret) = "sandbox" (Testgeld) oder "live". Fehlt einer
+//                            der Schlüssel, ist „PayPal direkt“ abgeschaltet.
 //
 // Der Demo-Modus der Website (demo.js) lädt GENAU diese Datei im Browser und
 // hängt sie an eine SQLite-Datenbank im Browser (sql.js). Deshalb: nur
@@ -25,7 +28,7 @@ const PW_MIN = 8;
 const TOKEN_TAGE = 60;
 const PBKDF2_RUNDEN = 100000; // Obergrenze in Workers
 const ROLLEN = ["user", "orga", "admin"];
-const ZAHLARTEN = { paypal: "PayPal (Freunde)", ueberweisung: "Überweisung", bar: "Bar" };
+const ZAHLARTEN = { paypal_direkt: "PayPal", paypal: "PayPal (Freunde)", ueberweisung: "Überweisung", bar: "Bar" };
 
 // ---------------------------------------------------------------------------
 // Schema – jede Anweisung einzeln (D1 exec verträgt keine mehrzeiligen).
@@ -120,6 +123,8 @@ const MIGRATIONEN = [
   "ALTER TABLE lans ADD COLUMN stufe_auto INTEGER NOT NULL DEFAULT 1",  // nächste Stufe automatisch, wenn die aktive ausverkauft ist
   "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
+  "ALTER TABLE tickets ADD COLUMN paypal_order TEXT NOT NULL DEFAULT ''",   // PayPal-Bestellung (Checkout) zum Ticket
+  "ALTER TABLE tickets ADD COLUMN paypal_capture TEXT NOT NULL DEFAULT ''", // PayPal-Transaktions-ID nach erfolgreicher Zahlung
 ];
 
 // Einstellungen mit Standardwerten. Gespeichert wird nur, was abweicht.
@@ -139,7 +144,7 @@ const STANDARD = {
     { icon: "😴", titel: "Schlafbereich", text: "Abgetrennt und ruhig" },
   ],
   zahlung: {
-    arten: { paypal: true, ueberweisung: true, bar: true },
+    arten: { paypal_direkt: false, paypal: true, ueberweisung: true, bar: true },
     paypal: "", paypalMe: "", iban: "", kontoinhaber: "", bank: "",
     hinweis: "Bitte gib bei PayPal und Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an. Bei PayPal bitte „Freunde und Familie“ wählen.",
     fristTage: 14,
@@ -568,6 +573,7 @@ const AKTIONEN = {
     const tag = heute();
     const einst = {};
     for (const k of OEFFENTLICHE_EINSTELLUNGEN) einst[k] = e[k];
+    einst.zahlung = { ...e.zahlung, arten: { ...e.zahlung.arten, paypal_direkt: !!e.zahlung.arten.paypal_direkt && paypalBereit(env) } };
     return {
       lan: lanAus(lan), zahlen: z, einstellungen: einst, news,
       tickettypen: typen.map((t) => {
@@ -811,6 +817,7 @@ const AKTIONEN = {
     const e = await einstellungen(env);
     const zahlart = String(body.zahlart || "");
     if (!ZAHLARTEN[zahlart] || !e.zahlung.arten[zahlart]) throw new F(400, "Bitte wähle eine Zahlart.");
+    if (zahlart === "paypal_direkt" && !paypalBereit(env)) throw new F(409, "PayPal ist gerade nicht verfügbar – bitte wähle eine andere Zahlart.");
     const alter = alterAm(u.geburtsdatum, lan.start || heute());
     if (alter !== null && alter < 16) throw new F(403, "Die Teilnahme ist leider erst ab 16 Jahren möglich.");
     if (await eins(env, "SELECT id FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id)) throw new F(409, "Du hast für diese LAN schon ein Ticket.");
@@ -860,9 +867,86 @@ const AKTIONEN = {
     const e = await einstellungen(c.env);
     const z = String(c.body.zahlart || "");
     if (!ZAHLARTEN[z] || !e.zahlung.arten[z]) throw new F(400, "Unbekannte Zahlart.");
+    if (z === "paypal_direkt" && !paypalBereit(c.env)) throw new F(409, "PayPal ist gerade nicht verfügbar.");
     const r = await los(c.env, "UPDATE tickets SET zahlart = ? WHERE user_id = ? AND lan_id = ? AND status = 'offen'", z, u.id, lan.id);
     if (!geaendert(r)) throw new F(409, "Kein offenes Ticket.");
     return { ok: true };
+  },
+
+  // ---------- PayPal direkt (Checkout) ----------
+  // 1. paypalStarten: legt bei PayPal eine Bestellung über den offenen Ticketbetrag an
+  //    und liefert die Adresse, auf die der Browser weiterleitet.
+  // 2. PayPal schickt den Gast zurück auf  <Website>?paypal=zurueck&token=<Bestellung>.
+  // 3. paypalAbschliessen: zieht das Geld ein, prüft Betrag + Ticket und setzt „bezahlt“.
+  async paypalStarten(c) {
+    const { env, body } = c;
+    const u = brauchtLogin(c);
+    if (!paypalBereit(env)) throw new F(409, "PayPal ist gerade nicht verfügbar.");
+    const lan = await aktiveLan(env);
+    const t = await eins(env, "SELECT * FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
+    if (!t) throw new F(404, "Kein Ticket gefunden.");
+    if (t.status === "bezahlt") return { bezahlt: true };
+    if (!(t.preis_cent > 0)) throw new F(409, "Für dieses Ticket ist nichts zu zahlen.");
+    // Rücksprung nur auf eine der erlaubten Website-Adressen (ORIGINS)
+    const ziel = String(body.zurueck || "");
+    let basis;
+    try { basis = new URL(ziel); } catch (e) { throw new F(400, "Ungültige Rücksprung-Adresse."); }
+    const erlaubt = String(env.ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (!erlaubt.includes(basis.origin)) throw new F(400, "Rücksprung-Adresse nicht erlaubt.");
+    basis.hash = ""; basis.search = "";
+    const typ = await eins(env, "SELECT name FROM ticket_types WHERE id = ?", t.type_id);
+    const bestellung = await paypalAnfrage(env, "POST", "/v2/checkout/orders", {
+      intent: "CAPTURE",
+      purchase_units: [{
+        reference_id: "ticket-" + t.id, custom_id: String(t.id),
+        description: (lan.name + " – " + ((typ && typ.name) || "Ticket") + " – " + u.nick).slice(0, 127),
+        amount: { currency_code: "EUR", value: (t.preis_cent / 100).toFixed(2) },
+      }],
+      payment_source: { paypal: { experience_context: {
+        brand_name: "AGE-LAN", locale: "de-DE", user_action: "PAY_NOW", shipping_preference: "NO_SHIPPING",
+        return_url: basis.href + "?paypal=zurueck", cancel_url: basis.href + "?paypal=abbruch",
+      } } },
+    }, "start-" + t.id + "-" + Date.now());
+    const link = (bestellung.links || []).find((l) => l.rel === "payer-action" || l.rel === "approve");
+    if (!bestellung.id || !link) throw new F(502, "PayPal hat keine Zahlungsseite geliefert.");
+    await los(env, "UPDATE tickets SET paypal_order = ?, zahlart = 'paypal_direkt' WHERE id = ? AND status = 'offen'", bestellung.id, t.id);
+    return { url: link.href };
+  },
+
+  async paypalAbschliessen(c) {
+    const { env, body } = c;
+    const u = brauchtLogin(c);
+    if (!paypalBereit(env)) throw new F(409, "PayPal ist gerade nicht verfügbar.");
+    const orderId = String(body.orderId || "").slice(0, 64);
+    const t = orderId && await eins(env, "SELECT * FROM tickets WHERE paypal_order = ? AND user_id = ?", orderId, u.id);
+    if (!t) throw new F(404, "Zu dieser PayPal-Zahlung gibt es kein Ticket.");
+    if (t.status === "bezahlt") return { ticket: await ticketDetail(env, t.id) };
+    if (t.status !== "offen") throw new F(409, "Das Ticket ist storniert. Melde dich bitte bei der Orga, falls Geld abgebucht wurde.");
+    let erg;
+    try {
+      erg = await paypalAnfrage(env, "POST", "/v2/checkout/orders/" + encodeURIComponent(orderId) + "/capture", {}, "capture-" + orderId);
+    } catch (e) {
+      // Schon eingezogen (z. B. Seite doppelt geladen) → Stand abfragen
+      if (!(e instanceof F) || !/ORDER_ALREADY_CAPTURED/.test(e.message)) throw e;
+      erg = await paypalAnfrage(env, "GET", "/v2/checkout/orders/" + encodeURIComponent(orderId));
+    }
+    const einh = (erg.purchase_units || [])[0] || {};
+    const cap = ((einh.payments || {}).captures || [])[0];
+    if (erg.status !== "COMPLETED" || !cap || cap.status !== "COMPLETED") {
+      await protokoll(c, "paypal-nicht-abgeschlossen", { ticket: t.id, status: erg.status, capture: cap && cap.status });
+      throw new F(409, cap && cap.status === "PENDING"
+        ? "PayPal prüft die Zahlung noch. Die Orga bestätigt dein Ticket, sobald das Geld da ist."
+        : "Die Zahlung wurde nicht abgeschlossen. Versuch es bitte nochmal.");
+    }
+    const betrag = Math.round(Number(cap.amount && cap.amount.value) * 100);
+    if (cap.amount.currency_code !== "EUR" || betrag !== t.preis_cent || String(einh.custom_id || cap.custom_id || "") !== String(t.id)) {
+      await protokoll(c, "paypal-betrag-falsch", { ticket: t.id, betrag, soll: t.preis_cent, capture: cap.id });
+      throw new F(409, "Der bezahlte Betrag passt nicht zum Ticket. Die Orga schaut sich das an.");
+    }
+    await los(env, "UPDATE tickets SET status = 'bezahlt', bezahlt_at = ?, bezahlt_von = 'PayPal', zahlart = 'paypal_direkt', paypal_capture = ? WHERE id = ? AND status = 'offen'",
+      Date.now(), String(cap.id), t.id);
+    await protokoll(c, "paypal-bezahlt", { ticket: t.id, betrag, capture: cap.id });
+    return { ticket: await ticketDetail(env, t.id) };
   },
 
   // ---------- Sitzplatz ----------
@@ -1514,7 +1598,7 @@ const AKTIONEN = {
   // ---------- Verwaltung: Einstellungen ----------
   async adminEinstellungen(c) {
     brauchtAdmin(c);
-    return { einstellungen: await einstellungen(c.env) };
+    return { einstellungen: await einstellungen(c.env), paypal: { bereit: paypalBereit(c.env), modus: paypalModus(c.env) } };
   },
 
   async adminEinstellungSpeichern(c) {
@@ -1809,6 +1893,37 @@ async function vorlageStatements(env, lanId, vorlageId) {
     zufallsId(), lanId, s.label, s.x, s.y, s.gesperrt || s.orga ? 1 : 0, Math.max(1, Math.min(9, Number(s.stufe) || 1))));
   stmts.push(st(env, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", "plan:" + lanId, JSON.stringify(daten.plan)));
   return stmts;
+}
+
+// ---------------------------------------------------------------------------
+// PayPal REST (Orders v2)
+// ---------------------------------------------------------------------------
+function paypalBereit(env) { return !!(env.PAYPAL_CLIENT_ID && env.PAYPAL_SECRET); }
+function paypalModus(env) { return String(env.PAYPAL_MODE || "sandbox").trim().toLowerCase() === "live" ? "live" : "sandbox"; }
+let paypalToken = null; // { modus, wert, bis } – hält, solange die Worker-Instanz lebt
+async function paypalAnfrage(env, methode, pfad, daten, idem) {
+  const modus = paypalModus(env);
+  const basis = modus === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
+  if (!paypalToken || paypalToken.modus !== modus || paypalToken.bis < Date.now() + 60000) {
+    const r = await fetch(basis + "/v1/oauth2/token", {
+      method: "POST",
+      headers: { Authorization: "Basic " + btoa(String(env.PAYPAL_CLIENT_ID).trim() + ":" + String(env.PAYPAL_SECRET).trim()), "Content-Type": "application/x-www-form-urlencoded" },
+      body: "grant_type=client_credentials",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.access_token) { console.error("PayPal-Token", r.status, j.error); throw new F(502, "PayPal-Anmeldung fehlgeschlagen (Zugangsdaten / Modus prüfen)."); }
+    paypalToken = { modus, wert: j.access_token, bis: Date.now() + (Number(j.expires_in) || 300) * 1000 };
+  }
+  const kopf = { Authorization: "Bearer " + paypalToken.wert, "Content-Type": "application/json", Prefer: "return=representation" };
+  if (idem) kopf["PayPal-Request-Id"] = idem;
+  const r = await fetch(basis + pfad, { method: methode, headers: kopf, body: methode === "GET" ? undefined : JSON.stringify(daten || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const grund = ((j.details || [])[0] || {}).issue || j.name || r.status;
+    console.error("PayPal", pfad, r.status, JSON.stringify(j).slice(0, 500));
+    throw new F(502, "PayPal-Fehler: " + grund);
+  }
+  return j;
 }
 
 // Automatische Ausbaustufe: Sind so viele Sitzplatz-Tickets verkauft, wie die aktive Stufe

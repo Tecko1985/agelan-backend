@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=50";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=50";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=50";
+import { api, tokenSetzen } from "./api.js?v=52";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=52";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=52";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -76,7 +76,7 @@ export async function kaufen(typId) {
   const typ = d.tickettypen.find((t) => t.id === typId);
   if (!typ) return;
   const za = d.einstellungen.zahlung;
-  const arten = [["paypal", "PayPal (Freunde & Familie)"], ["ueberweisung", "Überweisung"], ["bar", "Bar bei der Orga / Abendkasse"]].filter(([k]) => za.arten[k]);
+  const arten = [["paypal_direkt", "PayPal – sofort bezahlt, Platz gleich wählbar"], ["paypal", "PayPal (Freunde & Familie)"], ["ueberweisung", "Überweisung"], ["bar", "Bar bei der Orga / Abendkasse"]].filter(([k]) => za.arten[k]);
   const m = modal("Ticket bestellen", `<form class="formular">
     <div class="karte" style="padding:16px"><div class="zeile zwischen"><div><b>${esc(typ.name)}</b><div class="klein leise">${esc(d.lan.name)} · ${esc(zeitraum(d.lan.start, d.lan.ende))}</div></div>
       <b class="gold">${euro(typ.preisCent)}</b></div></div>
@@ -105,7 +105,9 @@ export async function kaufen(typId) {
     e.preventDefault();
     mitSperre($("[data-kaufen]", form), async () => {
       try {
-        await api("ticketKaufen", { ...daten(), zahlart: (form.querySelector("[name=zahlart]:checked") || {}).value, agb: form.agb.checked, notiz: form.notiz.value });
+        const zahlart = (form.querySelector("[name=zahlart]:checked") || {}).value;
+        const r = await api("ticketKaufen", { ...daten(), zahlart, agb: form.agb.checked, notiz: form.notiz.value });
+        if (zahlart === "paypal_direkt" && r.ticket && r.ticket.status === "offen") { await paypalZahlen(); return; }
         m.schliessen();
         toast("Ticket bestellt.", "ok");
         gehe("#/konto");
@@ -212,6 +214,8 @@ export async function render(main) {
     if (!(await bestaetigen("Willst du deine Bestellung wirklich stornieren? Dein Platz wird frei.", { ja: "Stornieren", gefahr: true }))) return;
     mitSperre(storno, async () => { await api("ticketStornieren"); toast("Bestellung storniert."); render(main); });
   };
+  const pp = $("[data-paypal]", main);
+  if (pp) pp.onclick = () => mitSperre(pp, async () => { try { await paypalZahlen(); } catch (e) { fehler(e); } });
   $$("[data-zahlart]", main).forEach((s) => (s.onchange = async () => {
     try { await api("zahlartAendern", { zahlart: s.value }); toast("Zahlart geändert.", "ok"); render(main); } catch (e) { fehler(e); }
   }));
@@ -228,10 +232,20 @@ export async function render(main) {
   gruppeVerdrahten(main, g);
 }
 
+// Weiter zu PayPal; zurück kommt der Gast auf ?paypal=zurueck (siehe paypalRueckkehr).
+export async function paypalZahlen() {
+  const r = await api("paypalStarten", { zurueck: location.origin + location.pathname });
+  if (r.bezahlt) { await neuLaden(); gehe("#/konto"); return; }
+  location.href = r.url;
+}
+
 function zahlInfo(t, za, kurz) {
-  const arten = [["paypal", "PayPal (Freunde)"], ["ueberweisung", "Überweisung"], ["bar", "Bar"]].filter(([k]) => za.arten[k]);
+  const arten = [["paypal_direkt", "PayPal"], ["paypal", "PayPal (Freunde)"], ["ueberweisung", "Überweisung"], ["bar", "Bar"]].filter(([k]) => za.arten[k] || k === t.zahlart);
   let wie = "";
-  if (t.zahlart === "paypal") {
+  if (t.zahlart === "paypal_direkt") {
+    wie = `<p style="margin-top:0">Du bezahlst <b>${euro(t.preisCent)}</b> direkt über PayPal (auch Lastschrift oder Karte über PayPal). Danach ist dein Ticket sofort bestätigt und du kannst deinen Platz wählen.</p>
+      ${za.arten.paypal_direkt ? `<button class="knopf primaer" data-paypal>Jetzt mit PayPal bezahlen</button>` : `<p class="klein leise">PayPal ist gerade nicht verfügbar – bitte wähle oben eine andere Zahlart.</p>`}`;
+  } else if (t.zahlart === "paypal") {
     wie = `<dl class="daten-liste"><dt>PayPal an</dt><dd><b>${esc(za.paypal || "wird noch bekanntgegeben")}</b></dd><dt>Betrag</dt><dd><b>${euro(t.preisCent)}</b></dd>
       <dt>Verwendungszweck</dt><dd class="mono">${esc(t.nutzer.nick)} ${kurz}</dd></dl>
       ${sichereUrl(za.paypalMe) ? `<a class="knopf klein" style="margin-top:10px" target="_blank" rel="noopener" href="${esc(sichereUrl(za.paypalMe).replace(/\/$/, "") + "/" + (t.preisCent / 100).toFixed(2))}">Mit PayPal.me bezahlen</a>` : ""}`;
@@ -246,7 +260,7 @@ function zahlInfo(t, za, kurz) {
     <div class="zeile zwischen" style="margin-bottom:10px"><b>So bezahlst du</b>
       <select data-zahlart style="width:auto">${arten.map(([k, l]) => `<option value="${k}" ${k === t.zahlart ? "selected" : ""}>${l}</option>`).join("")}</select></div>
     ${wie}
-    <p class="klein leise" style="margin:10px 0 0">${esc(za.hinweis)}${frist && t.zahlart !== "bar" ? " Bitte bezahle bis " + frist + "." : ""}</p></div>`;
+    ${t.zahlart === "paypal_direkt" ? (frist ? `<p class="klein leise" style="margin:10px 0 0">Bitte bezahle bis ${frist}.</p>` : "") : `<p class="klein leise" style="margin:10px 0 0">${esc(za.hinweis)}${frist && t.zahlart !== "bar" ? " Bitte bezahle bis " + frist + "." : ""}</p>`}</div>`;
 }
 
 function datenDialog(u, main) {

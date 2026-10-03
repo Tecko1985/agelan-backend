@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=50";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=50";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=52";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=52";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=50")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=52")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -96,11 +96,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=50")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=50")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=50")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=50")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=50")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=52")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=52")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=52")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=52")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=52")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -186,7 +186,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=50");
+    const konto = await import("./konto.js?v=52");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -529,7 +529,21 @@ async function seiteApp(main, bereich) {
 // ---------------------------------------------------------------------------
 $("#burger").onclick = () => $("#nav").classList.toggle("offen");
 window.addEventListener("hashchange", route);
-neuLaden().then(route).catch((e) => {
+// Rückkehr von PayPal: ?paypal=zurueck&token=<Bestellung> bzw. ?paypal=abbruch
+async function paypalRueckkehr() {
+  const q = new URLSearchParams(location.search);
+  const art = q.get("paypal");
+  if (!art) return;
+  const rest = new URLSearchParams(location.search);
+  ["paypal", "token", "PayerID"].forEach((k) => rest.delete(k));
+  history.replaceState(null, "", location.pathname + (rest.toString() ? "?" + rest.toString().replace(/=(&|$)/g, "$1") : "") + "#/konto");
+  if (art !== "zurueck" || !q.get("token")) { toast("PayPal-Zahlung abgebrochen. Du kannst es im Konto jederzeit nochmal versuchen."); return; }
+  try {
+    await api("paypalAbschliessen", { orderId: q.get("token") });
+    toast("Danke! Deine Zahlung ist da – such dir jetzt deinen Platz aus.", "ok");
+  } catch (e) { fehler(e); }
+}
+paypalRueckkehr().then(neuLaden).then(route).catch((e) => {
   $("#app").innerHTML = `<div class="wrap"><div class="leer" style="margin-top:40px">${esc(e.message)}</div></div>`;
   fehler(e);
 });

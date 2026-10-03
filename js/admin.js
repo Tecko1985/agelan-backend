@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=50";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=50";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=50";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=50";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=50";
+import { api, istDemo } from "./api.js?v=52";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=52";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=52";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=52";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=52";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -20,7 +20,7 @@ const REITER = [
   ["benutzer", "Benutzer", true],
   ["protokoll", "Protokoll", true],
 ];
-const ZAHLARTEN = { paypal: "PayPal", ueberweisung: "Überweisung", bar: "Bar" };
+const ZAHLARTEN = { paypal_direkt: "PayPal (direkt)", paypal: "PayPal (Freunde)", ueberweisung: "Überweisung", bar: "Bar" };
 let reiter = "uebersicht";
 let lanId = null;
 let planModul = null; // Sitzplan-Editor, sobald einmal geladen
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=50");
+    const { ticketHtml } = await import("./konto.js?v=52");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=50");
+  planModul = await import("./planeditor.js?v=52");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=50");
+    const { ticketHtml } = await import("./konto.js?v=52");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -937,7 +937,7 @@ async function platzWaehlen(t, feld) {
 }
 
 async function einstellungen(box) {
-  const { einstellungen: e } = await api("adminEinstellungen");
+  const { einstellungen: e, paypal: pp = {} } = await api("adminEinstellungen");
   const s = e.seite, z = e.zahlung;
   box.innerHTML = kopf("Einstellungen") + `<div class="stapel">
     <form class="karte formular" data-key="seite"><h3>Website</h3>
@@ -946,6 +946,8 @@ async function einstellungen(box) {
       <div class="zwei">${["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => `<label class="feld"><span>${k}</span><input name="so_${k}" value="${esc((s.socials || {})[k] || "")}" placeholder="https://…"></label>`).join("")}</div>
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="zahlung"><h3>Zahlung</h3>
+      <label class="check"><input type="checkbox" name="a_paypal_direkt" ${z.arten.paypal_direkt ? "checked" : ""}> <span><b>PayPal direkt</b> – Gast zahlt beim Kauf über PayPal, Ticket ist sofort bezahlt
+        <span class="klein ${pp.bereit ? "gruen" : "rot"}" style="display:block">${pp.bereit ? "Eingerichtet (" + (pp.modus === "live" ? "LIVE – echtes Geld" : "Sandbox – Testgeld") + ")" : "Noch nicht eingerichtet: Secrets PAYPAL_CLIENT_ID und PAYPAL_SECRET beim Worker fehlen"}</span></span></label>
       <div class="zeile"><label class="check"><input type="checkbox" name="a_paypal" ${z.arten.paypal ? "checked" : ""}> PayPal (Freunde)</label><label class="check"><input type="checkbox" name="a_ueberweisung" ${z.arten.ueberweisung ? "checked" : ""}> Überweisung</label><label class="check"><input type="checkbox" name="a_bar" ${z.arten.bar ? "checked" : ""}> Bar</label></div>
       <div class="zwei"><label class="feld"><span>PayPal-Adresse</span><input name="paypal" value="${esc(z.paypal)}"></label><label class="feld"><span>PayPal.me-Link (optional)</span><input name="paypalMe" value="${esc(z.paypalMe)}" placeholder="https://paypal.me/…"></label></div>
       <div class="zwei"><label class="feld"><span>Kontoinhaber</span><input name="kontoinhaber" value="${esc(z.kontoinhaber)}"></label><label class="feld"><span>IBAN</span><input name="iban" value="${esc(z.iban)}"></label></div>
@@ -981,7 +983,7 @@ async function einstellungen(box) {
 
   const sammeln = {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
-    zahlung: (v) => [["zahlung", { arten: { paypal: v.a_paypal, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: v.paypal, paypalMe: v.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
+    zahlung: (v) => [["zahlung", { arten: { paypal_direkt: v.a_paypal_direkt, paypal: v.a_paypal, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: v.paypal, paypalMe: v.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
     netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
     optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],
