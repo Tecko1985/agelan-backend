@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=29";
+import { esc } from "./ui.js?v=30";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 

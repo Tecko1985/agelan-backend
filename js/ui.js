@@ -79,7 +79,8 @@ export function modal(titel, inhaltHtml, { breit = false, beimSchliessen = null 
     const alle = $$(".modal-hg");
     if (alle[alle.length - 1] === hg) schliessen();
   };
-  hg.addEventListener("mousedown", (e) => { if (e.target === hg) schliessen(); });
+  // Klick neben das Fenster schließt NICHT – sonst gehen halb ausgefüllte Formulare verloren.
+  // Schließen nur über X, Escape oder die Knöpfe im Dialog.
   $(".x", hg).onclick = schliessen;
   hg.schliessen = schliessen; // für den Router: Seitenwechsel schließt offene Dialoge
   document.addEventListener("keydown", taste);
@@ -89,7 +90,7 @@ export function modal(titel, inhaltHtml, { breit = false, beimSchliessen = null 
   return { el: inhalt, schliessen };
 }
 
-// Liefert true/false; X, Escape und Klick daneben zählen als „nein“.
+// Liefert true/false; X und Escape zählen als „nein“.
 export function bestaetigen(text, { ja = "Ja", nein = "Abbrechen", gefahr = false } = {}) {
   return new Promise((ok) => {
     const m = modal("Bitte bestätigen", `<p>${esc(text)}</p><div class="zeile ende">
