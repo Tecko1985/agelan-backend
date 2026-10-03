@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=55";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=55";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=56";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=56";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=55")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=56")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -96,11 +96,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=55")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=55")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=55")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=55")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=55")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=56")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=56")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=56")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=56")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=56")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -186,7 +186,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=55");
+    const konto = await import("./konto.js?v=56");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -346,7 +346,7 @@ async function seiteNews(main, id) {
 async function seiteFaq(main) {
   const d = zustand.daten || await neuLaden();
   main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><h1>FAQ</h1></div>
-    ${d.einstellungen.faq.map((f, i) => `<details class="faq" ${i === 0 ? "open" : ""}><summary>${esc(f.f)}</summary><div>${esc(f.a)}</div></details>`).join("")}</div>`;
+    ${d.einstellungen.faq.map((f, i) => `<details class="faq" ${i === 0 ? "open" : ""}><summary>${esc(f.f)}</summary><div>${mitLinks(f.a)}</div></details>`).join("")}</div>`;
 }
 
 // Packliste: fest im Code, Haken merkt sich nur der eigene Browser.
@@ -522,6 +522,14 @@ async function seiteApp(main, bereich) {
   main.innerHTML = `<div class="app-rahmen">
     <div class="app-kopf"><div class="wrap lz-kacheln">${APP_KACHELN.map(([b, titel, text, ico]) => `<a class="app-kachel ${b === bereich ? "aktiv" : ""}" href="#/app/${b}"><b>${ico} ${titel}</b><small>${text}</small></a>`).join("")}</div></div>
     <iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}&t=${Date.now()}"></iframe></div>`;
+}
+
+// Text mit Links: [Linktext](https://…) oder nackte https-Adressen. Erst escapen, dann nur http(s) verlinken.
+function mitLinks(text) {
+  const a = (url, t) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`;
+  return esc(text)
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, url) => a(url, t))
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, vor, url) => vor + a(url, url));
 }
 
 // ---------------------------------------------------------------------------
