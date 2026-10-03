@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=42";
+import { esc } from "./ui.js?v=46";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
@@ -12,12 +12,15 @@ export function dekoSvg(d, klasse = "") {
     ${d.text ? `<text x="${x + w / 2}" y="${y + h / 2 + 4}" text-anchor="middle">${esc(d.text)}</text>` : ""}</g>`;
 }
 
-export function sitzSvg(s, klassen = "") {
-  const g = U - 4;
+// teil: "oben"/"unten" = Hälfte eines Doppeltischs. Die beiden Plätze stoßen dann ohne
+// Lücke aneinander und wirken wie ein Block; zwischen den Tischen bleibt die normale Lücke.
+export function sitzSvg(s, klassen = "", teil = "") {
+  // Tisch: beide Hälften berühren sich in der Mitte, zum nächsten Tisch bleiben 6 px Luft.
+  const g = U - 4, h = teil ? U - 3 : g, oben = teil === "oben" ? s.y * U + 3 : teil === "unten" ? s.y * U : s.y * U + 2;
   return `<g class="sitz s-${esc(s.status || "frei")} ${s.meins ? "meins" : ""} ${s.meineGruppe && !s.meins ? "meinegruppe" : ""} ${klassen}"
-      data-sitz="${esc(s.id)}" transform="translate(${s.x * U + 2},${s.y * U + 2})">
-    <rect width="${g}" height="${g}" rx="5"></rect>
-    <text x="${g / 2}" y="${g / 2 + 3}" text-anchor="middle">${esc(s.label)}</text></g>`;
+      data-sitz="${esc(s.id)}" transform="translate(${s.x * U + 2},${oben})">
+    <rect width="${g}" height="${h}" rx="5"></rect>
+    <text x="${g / 2}" y="${h / 2 + 3}" text-anchor="middle">${esc(s.label)}</text></g>`;
 }
 
 // Fläche, die wirklich gebraucht wird: nie kleiner als alle Plätze und Flächen –
@@ -30,24 +33,20 @@ export function planGroesse(plan, sitze) {
   };
 }
 
-// Doppeltische: Je zwei direkt untereinander liegende Plätze derselben Spalte bilden
-// einen Tisch (A1+A2, A3+A4, …) – von oben her paarweise, jede Platzreihe für sich.
-export function tischeSvg(sitze) {
-  const spalten = new Map();
-  for (const s of sitze) { const k = s.x; if (!spalten.has(k)) spalten.set(k, []); spalten.get(k).push(s); }
-  const tische = [];
-  for (const [x, liste] of spalten) {
-    liste.sort((a, b) => a.y - b.y);
-    for (let i = 0; i < liste.length - 1; i++) {
-      if (Math.abs(liste[i + 1].y - liste[i].y - 1) < 0.01) { tische.push({ x, y: liste[i].y }); i++; }
+// Doppeltische: zwei Plätze derselben Reihe mit den Nummern 1+2, 3+4, … die direkt
+// untereinander liegen (A1 über A2). Liefert id -> "oben" | "unten".
+export function tischTeile(sitze) {
+  const teile = new Map();
+  const nachName = new Map(sitze.map((s) => [String(s.label).toUpperCase(), s]));
+  for (const s of sitze) {
+    const m = String(s.label).toUpperCase().match(/^(.*?)(\d+)$/);
+    if (!m || Number(m[2]) % 2 !== 1) continue;
+    const partner = nachName.get(m[1] + (Number(m[2]) + 1));
+    if (partner && Math.abs(partner.x - s.x) < 0.01 && Math.abs(partner.y - s.y - 1) < 0.01) {
+      teile.set(s.id, "oben"); teile.set(partner.id, "unten");
     }
   }
-  return tische.map((t) => {
-    // leiser Holzton hinter beiden Plätzen (bleibt in der eigenen Spalte) + Steg zwischen ihnen
-    const x = t.x * U + 0.5, y = t.y * U + 0.5, w = U - 1, h = 2 * U - 1;
-    const sx = t.x * U + U / 2 - 6, sy = (t.y + 1) * U - 3;
-    return `<g class="tisch"><rect class="tisch-flaeche" x="${x}" y="${y}" width="${w}" height="${h}" rx="7"></rect><rect class="tisch-steg" x="${sx}" y="${sy}" width="12" height="6" rx="2"></rect></g>`;
-  }).join("");
+  return teile;
 }
 
 export function planSvg(plan, sitze, { zoom = 1, raster = false, klassen = () => "", extra = "", svgKlasse = "" } = {}) {
@@ -62,8 +61,7 @@ export function planSvg(plan, sitze, { zoom = 1, raster = false, klassen = () =>
     <rect x="-6" y="-6" width="${w + 12}" height="${h + 12}" fill="transparent"></rect>
     ${raster ? `<g class="editor-raster">${linien}</g>` : `<rect x="0" y="0" width="${w}" height="${h}" rx="10" fill="rgba(255,255,255,.015)" stroke="rgba(255,255,255,.06)"></rect>`}
     ${(plan.deko || []).map((d) => dekoSvg(d, klassen(d, true))).join("")}
-    ${tischeSvg(sitze)}
-    ${sitze.map((s) => sitzSvg(s, klassen(s, false))).join("")}
+    ${(() => { const teile = tischTeile(sitze); return sitze.map((s) => sitzSvg(s, klassen(s, false), teile.get(s.id) || "")).join(""); })()}
     ${extra}
   </svg>`;
 }
@@ -105,6 +103,6 @@ export function tooltipAnbinden(container, sitzVonId) {
 
 export function legendeHtml() {
   return `<div class="legende">
-    <div><i class="l-frei"></i>Frei</div><div><i class="l-belegt"></i>Belegt</div><div><i class="l-tisch"></i>Doppeltisch (z. B. A1 + A2)</div>
+    <div><i class="l-frei"></i>Frei</div><div><i class="l-belegt"></i>Belegt</div><div><i class="l-tisch"></i>Doppeltisch – zusammenhängende Plätze (A1 + A2)</div>
     <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
 }

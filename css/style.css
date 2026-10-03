@@ -368,9 +368,6 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .sitz.meins text { fill: #2a0016; }
 .sitz.gewaehlt rect { stroke: #fff; stroke-width: 3; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8)); }
 .sitz.markiert rect { stroke: var(--gold2); stroke-width: 3; stroke-dasharray: 3 2; }
-.tisch { pointer-events: none; }
-.tisch .tisch-flaeche { fill: rgba(170, 118, 62, 0.22); }
-.tisch .tisch-steg { fill: #a8763f; }
 .deko rect { rx: 6; }
 .deko text { font: 600 11px var(--sans); fill: rgba(255, 255, 255, 0.75); pointer-events: none; }
 .deko.f-gold rect { fill: rgba(232, 182, 76, 0.16); stroke: rgba(232, 182, 76, 0.55); }
@@ -387,7 +384,7 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .l-gruppe { background: #1f4f9c; border-color: #6aa8ff !important; }
 .l-meinegruppe { background: transparent; border-color: var(--lila) !important; }
 .l-meins { background: var(--pink); border-color: #fff !important; }
-.l-tisch { background: rgba(150, 102, 52, 0.28); border-color: rgba(205, 150, 85, 0.55) !important; }
+.l-tisch { background: #2a7d4b; border-color: #49d483 !important; height: 26px !important; width: 14px !important; border-radius: 4px !important; vertical-align: -8px !important; background-image: linear-gradient(transparent 46%, #0a0b0f 46%, #0a0b0f 54%, transparent 54%); }
 .l-gesperrt { background: #2a2a30; border-color: #444 !important; }
 .plan-tooltip { position: fixed; z-index: 90; pointer-events: none; background: #000d; border: 1px solid var(--rand2); padding: 8px 11px; border-radius: 9px; font-size: 0.85rem; max-width: 240px; }
 

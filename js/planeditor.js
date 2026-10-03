@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=42";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=42";
-import { planSvg, planGroesse, U } from "./plan.js?v=42";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=42";
+import { api } from "./api.js?v=46";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=46";
+import { planSvg, planGroesse, U } from "./plan.js?v=46";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=46";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -64,6 +64,9 @@ export async function editor(container, lanId) {
       <div class="gruppe">${WERKZEUGE.map(([k, l, t]) => `<button class="werkzeug" data-w="${k}" title="${esc(t)}">${l}</button>`).join("")}</div>
       <div class="gruppe"><button class="werkzeug" data-a="undo" title="Rückgängig (Strg+Z)">↶</button><button class="werkzeug" data-a="alle" title="Alles auswählen">Alle</button>
         <button class="werkzeug" data-a="zoom-" title="Verkleinern">−</button><button class="werkzeug" data-a="zoom+" title="Vergrößern">+</button></div>
+      <div class="gruppe" data-reihe-gruppe title="Neue Plätze mit „+ Platz“ heißen dann z. B. G17, G18 … (Nummer zählt in der Reihe weiter)">
+        <label class="klein leise">Reihe <input data-reihe maxlength="3" placeholder="z. B. G" style="width:70px;padding:5px;text-transform:uppercase"></label>
+        <span class="klein leise" data-reihe-naechster></span></div>
       <div class="gruppe"><label class="klein leise">Breite <input data-gr="breite" type="number" min="4" max="200" style="width:64px;padding:5px"></label>
         <label class="klein leise">Höhe <input data-gr="hoehe" type="number" min="4" max="200" style="width:64px;padding:5px"></label></div>
       <div class="gruppe"><button class="knopf klein primaer" data-a="speichern">Speichern</button><button class="knopf klein geist" data-a="verwerfen">Verwerfen</button></div>
@@ -92,6 +95,8 @@ export async function editor(container, lanId) {
       klassen: (x) => (st.auswahl.has(x.id) ? "gewaehlt" : ""),
     });
     $$("[data-w]", container).forEach((b) => b.classList.toggle("an", b.dataset.w === st.werkzeug));
+    const rg = $("[data-reihe-gruppe]", container);
+    if (rg) { rg.classList.toggle("versteckt", st.werkzeug !== "setzen"); reiheHinweis(); }
     eigenschaften();
   };
 
@@ -105,9 +110,18 @@ export async function editor(container, lanId) {
   };
   const zelleFrei = (x, y, ohne = new Set()) => !st.sitze.some((s) => !ohne.has(s.id) && Math.abs(s.x - x) < 0.9 && Math.abs(s.y - y) < 0.9);
 
+  // Name für einen neuen Platz: eingegebene Reihe (z. B. „G“) + nächste freie Nummer dieser Reihe.
+  // Ohne Reihe wie bisher P1, P2, …
+  const reiheJetzt = () => (($("[data-reihe]", container) || {}).value || "").trim().toUpperCase().replace(/[^A-ZÄÖÜ]/g, "");
   const naechsterName = () => {
-    const nums = st.sitze.map((s) => s.label.match(/^P(\d+)$/)).filter(Boolean).map((m) => Number(m[1]));
-    return "P" + ((nums.length ? Math.max(...nums) : 0) + 1);
+    const praefix = reiheJetzt() || "P";
+    const muster = new RegExp("^" + praefix + "(\\d+)$", "i");
+    const nums = st.sitze.map((s) => s.label.match(muster)).filter(Boolean).map((m) => Number(m[1]));
+    return praefix + ((nums.length ? Math.max(...nums) : 0) + 1);
+  };
+  const reiheHinweis = () => {
+    const ziel = $("[data-reihe-naechster]", container);
+    if (ziel) ziel.textContent = "nächster: " + naechsterName();
   };
 
   // ---- Maus/Touch ----
@@ -145,6 +159,7 @@ export async function editor(container, lanId) {
     if (x < 0 || y < 0 || x >= st.plan.breite || y >= st.plan.hoehe || !zelleFrei(x, y)) return;
     st.sitze.push({ id: neueId(), label: naechsterName(), x, y, gesperrt: false, belegt: false });
     zeichnen();
+    reiheHinweis();
   };
 
   const rechteckSvg = (a, b) => {
@@ -383,7 +398,8 @@ export async function editor(container, lanId) {
   };
 
   // ---- Leiste ----
-  $$("[data-w]", container).forEach((b) => (b.onclick = () => { st.werkzeug = b.dataset.w; zeichnen(); }));
+  $$("[data-w]", container).forEach((b) => (b.onclick = () => { st.werkzeug = b.dataset.w; zeichnen(); if (b.dataset.w === "setzen") $("[data-reihe]", container).focus(); }));
+  $("[data-reihe]", container).oninput = reiheHinweis;
   $$("[data-gr]", container).forEach((i) => (i.onchange = () => { merken(); st.plan[i.dataset.gr] = Math.min(200, Math.max(4, Number(i.value) || 10)); zeichnen(); }));
   $$("[data-a]", container).forEach((b) => (b.onclick = async () => {
     const a = b.dataset.a;
