@@ -231,12 +231,24 @@ async function eins(env, sql, ...p) { return (await env.DB.prepare(sql).bind(...
 async function los(env, sql, ...p) { return await env.DB.prepare(sql).bind(...p.map(n)).run(); }
 const st = (env, sql, ...p) => env.DB.prepare(sql).bind(...p.map(n));
 const geaendert = (r) => (r && r.meta ? r.meta.changes : 0) || 0;
+// Mehrere SELECTs in EINER Runde zur Datenbank (D1-Batch). Jede einzelne Abfrage kostet
+// sonst eine eigene Netzrunde (~20–30 ms) – das war der größte Bremser der Seite.
+async function lesen(env, ...abfragen) {
+  const r = await env.DB.batch(abfragen.map(([sql, ...p]) => st(env, sql, ...p)));
+  return r.map((x) => (x && x.results) || []);
+}
+// Die aktive LAN als SQL-Ausdruck – damit sie im selben Batch wie die übrigen Abfragen steht.
+const AKTIVE_LAN = "COALESCE((SELECT id FROM lans WHERE aktiv = 1 ORDER BY id DESC LIMIT 1), (SELECT id FROM lans ORDER BY id DESC LIMIT 1))";
+// lanId: Zahl → Platzhalter, sonst der Ausdruck oben.
+const lanBed = (lanId) => (typeof lanId === "number" && lanId > 0 ? ["?", [lanId]] : [AKTIVE_LAN, []]);
+const EINSTELLUNGEN_SQL = "SELECT key, value FROM settings WHERE key NOT LIKE 'plan:%' AND key NOT LIKE 'klon:%'";
 
 let istBereit = false;
 async function bereitmachen(env) {
   if (istBereit) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
-  for (const m of MIGRATIONEN) { try { await env.DB.prepare(m).run(); } catch (e) { /* gibt es schon */ } }
+  // Parallel statt nacheinander: schlägt fast immer fehl („gibt es schon“), kostet aber je eine Runde.
+  await Promise.all(MIGRATIONEN.map((m) => env.DB.prepare(m).run().catch(() => { /* gibt es schon */ })));
   const lan = await eins(env, "SELECT id FROM lans LIMIT 1");
   if (!lan) await grundausstattung(env);
   istBereit = true;
@@ -281,7 +293,9 @@ async function grundausstattung(env) {
 }
 
 async function einstellungen(env) {
-  const zeilen = await alle(env, "SELECT key, value FROM settings WHERE key NOT LIKE 'plan:%'");
+  return einstellungenAus(await alle(env, EINSTELLUNGEN_SQL));
+}
+function einstellungenAus(zeilen) {
   const e = JSON.parse(JSON.stringify(STANDARD));
   for (const z of zeilen) {
     try { e[z.key] = JSON.parse(z.value); } catch (x) { /* kaputter Wert: Standard bleibt */ }
@@ -481,16 +495,16 @@ function typAus(t) {
 function parse(s, ersatz) { try { return JSON.parse(s); } catch (e) { return ersatz; } }
 
 // Volles Ticket-Bild (für Konto, Check-in, Admin).
-async function ticketDetail(env, ticketId) {
-  const t = await eins(env, `SELECT t.*, u.nick, u.vorname, u.nachname, u.email, u.geburtsdatum, u.discord,
+const TICKET_SQL = `SELECT t.*, u.nick, u.vorname, u.nachname, u.email, u.geburtsdatum, u.discord,
       tt.name AS typ_name, tt.features AS typ_features, tt.mit_sitz, tt.beschreibung AS typ_beschreibung,
       s.label AS sitz_label, l.name AS lan_name, l.start AS lan_start, l.ende AS lan_ende, l.ort AS lan_ort, l.adresse AS lan_adresse,
       g.name AS gruppe_name, c.code AS coupon_code
     FROM tickets t JOIN users u ON u.id = t.user_id JOIN ticket_types tt ON tt.id = t.type_id
     JOIN lans l ON l.id = t.lan_id LEFT JOIN seats s ON s.id = t.seat_id
     LEFT JOIN group_members gm ON gm.user_id = t.user_id AND gm.lan_id = t.lan_id
-    LEFT JOIN groups g ON g.id = gm.group_id LEFT JOIN coupons c ON c.id = t.coupon_id
-    WHERE t.id = ?`, ticketId);
+    LEFT JOIN groups g ON g.id = gm.group_id LEFT JOIN coupons c ON c.id = t.coupon_id`;
+async function ticketDetail(env, ticketId) {
+  const t = await eins(env, TICKET_SQL + " WHERE t.id = ?", ticketId);
   return t ? ticketAus(t) : null;
 }
 function ticketAus(t) {
@@ -509,12 +523,19 @@ function ticketAus(t) {
 
 // Belegungszahlen einer LAN
 async function zahlen(env, lan) {
-  // Gesperrte und Orga-Plätze zählen nicht als buchbar; Tickets auf Orga-Plätzen deshalb auch nicht.
-  const sitze = await eins(env, "SELECT COUNT(*) AS n FROM seats WHERE lan_id = ? AND gesperrt = 0 AND orga = 0", lan.id);
-  const mitSitz = await eins(env, `SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id
-    LEFT JOIN seats s ON s.id = t.seat_id
-    WHERE t.lan_id = ? AND t.status != 'storniert' AND tt.mit_sitz = 1 AND COALESCE(s.orga, 0) = 0`, lan.id);
-  const gaeste = await eins(env, "SELECT COUNT(*) AS n, SUM(status = 'bezahlt') AS bezahlt FROM tickets WHERE lan_id = ? AND status != 'storniert'", lan.id);
+  return zahlenAus(lan, await lesen(env, ...zahlenAbfragen(lan.id)));
+}
+// Gesperrte und Orga-Plätze zählen nicht als buchbar; Tickets auf Orga-Plätzen deshalb auch nicht.
+function zahlenAbfragen(lanId) {
+  const [w, p] = lanBed(lanId);
+  return [
+    [`SELECT COUNT(*) AS n FROM seats WHERE lan_id = ${w} AND gesperrt = 0 AND orga = 0`, ...p],
+    [`SELECT COUNT(*) AS n FROM tickets t JOIN ticket_types tt ON tt.id = t.type_id LEFT JOIN seats s ON s.id = t.seat_id
+      WHERE t.lan_id = ${w} AND t.status != 'storniert' AND tt.mit_sitz = 1 AND COALESCE(s.orga, 0) = 0`, ...p],
+    [`SELECT COUNT(*) AS n, SUM(status = 'bezahlt') AS bezahlt FROM tickets WHERE lan_id = ${w} AND status != 'storniert'`, ...p],
+  ];
+}
+function zahlenAus(lan, [[sitze], [mitSitz], [gaeste]]) {
   const kapazitaet = Math.min(sitze.n, lan.gaeste_limit || sitze.n);
   return {
     sitzplaetze: kapazitaet, sitzTickets: mitSitz.n, sitzFrei: Math.max(0, kapazitaet - mitSitz.n),
@@ -529,13 +550,18 @@ const AKTIONEN = {
   // ---------- öffentlich ----------
   async oeffentlich(c) {
     const { env } = c;
-    const lan = await aktiveLan(env);
-    const e = await einstellungen(env);
-    const typen = await alle(env, "SELECT * FROM ticket_types WHERE lan_id = ? AND aktiv = 1 ORDER BY sort, id", lan.id);
-    const verkauft = await alle(env, "SELECT type_id, COUNT(*) AS n FROM tickets WHERE lan_id = ? AND status != 'storniert' GROUP BY type_id", lan.id);
-    const z = await zahlen(env, lan);
+    const [[lan], einstZeilen, typen, verkauft, ...rest] = await lesen(env,
+      [`SELECT * FROM lans WHERE id = ${AKTIVE_LAN}`],
+      [EINSTELLUNGEN_SQL],
+      [`SELECT * FROM ticket_types WHERE lan_id = ${AKTIVE_LAN} AND aktiv = 1 ORDER BY sort, id`],
+      [`SELECT type_id, COUNT(*) AS n FROM tickets WHERE lan_id = ${AKTIVE_LAN} AND status != 'storniert' GROUP BY type_id`],
+      ...zahlenAbfragen(null),
+      ["SELECT id, titel, teaser, datum FROM news ORDER BY datum DESC, id DESC LIMIT 30"]);
+    if (!lan) throw new F(500, "Keine LAN angelegt.");
+    const e = einstellungenAus(einstZeilen);
+    const z = zahlenAus(lan, rest.slice(0, 3));
+    const news = rest[3];
     const tag = heute();
-    const news = await alle(env, "SELECT id, titel, teaser, datum FROM news ORDER BY datum DESC, id DESC LIMIT 30");
     const einst = {};
     for (const k of OEFFENTLICHE_EINSTELLUNGEN) einst[k] = e[k];
     return {
@@ -584,13 +610,12 @@ const AKTIONEN = {
 
   async sitzplan(c) {
     const { env } = c;
-    const lan = await lanAusBody(c);
-    const e = await einstellungen(env);
-    const istOrga = c.ich && (c.ich.rolle === "orga" || c.ich.rolle === "admin");
-    const namenZeigen = e.gaesteOeffentlich || istOrga;
-    const plan = parse((await eins(env, "SELECT value FROM settings WHERE key = ?", "plan:" + lan.id) || {}).value, null) || { breite: 20, hoehe: 20, deko: [] };
-    const jetzt = Date.now();
-    const sitze = await alle(env, `SELECT s.*, t.status AS t_status, t.user_id AS t_user, u.nick AS t_nick,
+    const [w, p] = lanBed(Number(c.body.lanId) || null);
+    const [[lan], einstZeilen, [planZeile], sitze, [mg]] = await lesen(env,
+      [`SELECT * FROM lans WHERE id = ${w}`, ...p],
+      [EINSTELLUNGEN_SQL],
+      [`SELECT value FROM settings WHERE key = 'plan:' || (${w})`, ...p],
+      [`SELECT s.*, t.status AS t_status, t.user_id AS t_user, u.nick AS t_nick,
         g.name AS g_name, g.ablauf AS g_ablauf, tg.name AS tg_name, tgm.group_id AS t_group
       FROM seats s
       LEFT JOIN tickets t ON t.seat_id = s.id
@@ -598,12 +623,15 @@ const AKTIONEN = {
       LEFT JOIN groups g ON g.id = s.group_id
       LEFT JOIN group_members tgm ON tgm.user_id = t.user_id AND tgm.lan_id = s.lan_id
       LEFT JOIN groups tg ON tg.id = tgm.group_id
-      WHERE s.lan_id = ? ORDER BY s.y, s.x`, lan.id);
-    let meineGruppe = null;
-    if (c.ich) {
-      const m = await eins(env, "SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ?", c.ich.id, lan.id);
-      meineGruppe = m ? m.group_id : null;
-    }
+      WHERE s.lan_id = ${w} ORDER BY s.y, s.x`, ...p],
+      [`SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ${w}`, c.ich ? c.ich.id : -1, ...p]);
+    if (!lan) throw new F(404, "LAN nicht gefunden.");
+    const e = einstellungenAus(einstZeilen);
+    const istOrga = c.ich && (c.ich.rolle === "orga" || c.ich.rolle === "admin");
+    const namenZeigen = e.gaesteOeffentlich || istOrga;
+    const plan = parse((planZeile || {}).value, null) || { breite: 20, hoehe: 20, deko: [] };
+    const jetzt = Date.now();
+    const meineGruppe = mg ? mg.group_id : null;
     return {
       lan: lanAus(lan), plan,
       sitze: sitze.map((s) => {
@@ -635,13 +663,13 @@ const AKTIONEN = {
     const istOrga = c.ich && (c.ich.rolle === "orga" || c.ich.rolle === "admin");
     if (!e.gaesteOeffentlich && !istOrga) return { oeffentlich: false, gaeste: [] };
     const lan = await lanAusBody(c);
-    const z = await zahlen(env, lan);
-    const zeilen = await alle(env, `SELECT u.nick, s.label AS sitz, g.name AS gruppe, tt.name AS typ, t.status
+    const [zeilen, ...zz] = await lesen(env, [`SELECT u.nick, s.label AS sitz, g.name AS gruppe, tt.name AS typ, t.status
       FROM tickets t JOIN users u ON u.id = t.user_id JOIN ticket_types tt ON tt.id = t.type_id
       LEFT JOIN seats s ON s.id = t.seat_id
       LEFT JOIN group_members gm ON gm.user_id = t.user_id AND gm.lan_id = t.lan_id
       LEFT JOIN groups g ON g.id = gm.group_id
-      WHERE t.lan_id = ? AND t.status != 'storniert' ORDER BY t.created_at`, lan.id);
+      WHERE t.lan_id = ? AND t.status != 'storniert' ORDER BY t.created_at`, lan.id], ...zahlenAbfragen(lan.id));
+    const z = zahlenAus(lan, zz);
     return { oeffentlich: true, zahlen: z, gaeste: zeilen.map((r) => ({ nick: r.nick, sitz: r.sitz || "", gruppe: r.gruppe || "", typ: r.typ, bezahlt: r.status === "bezahlt" })) };
   },
 
@@ -686,12 +714,17 @@ const AKTIONEN = {
   async ich(c) {
     const { env } = c;
     const u = brauchtLogin(c);
-    const lan = await aktiveLan(env);
-    const t = await eins(env, "SELECT id FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
-    const gm = await eins(env, "SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ?", u.id, lan.id);
+    const [[lan], [tz], [gm], einstZeilen] = await lesen(env,
+      [`SELECT * FROM lans WHERE id = ${AKTIVE_LAN}`],
+      [TICKET_SQL + ` WHERE t.user_id = ? AND t.lan_id = ${AKTIVE_LAN} AND t.status != 'storniert' LIMIT 1`, u.id],
+      [`SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ${AKTIVE_LAN}`, u.id],
+      [EINSTELLUNGEN_SQL]);
+    if (!lan) throw new F(500, "Keine LAN angelegt.");
+    const ticket = tz ? ticketAus(tz) : null;
+    if (ticket && ticket.checkinAt) ticket.zugang = zugangAus(einstellungenAus(einstZeilen), ticket);
     return {
       nutzer: nutzerOeffentlich(u),
-      ticket: t ? await mitZugang(env, await ticketDetail(env, t.id)) : null,
+      ticket,
       gruppe: gm ? await gruppeDetail(env, gm.group_id, u.id) : null,
       alter: alterAm(u.geburtsdatum, lan.start || heute()),
     };
@@ -1007,10 +1040,8 @@ const AKTIONEN = {
   async adminTickets(c) {
     brauchtOrga(c);
     const lan = await lanAusBody(c);
-    const zeilen = await alle(c.env, "SELECT id FROM tickets WHERE lan_id = ? ORDER BY created_at DESC", lan.id);
-    const tickets = [];
-    for (const z of zeilen) tickets.push(await ticketDetail(c.env, z.id));
-    return { lan: lanAus(lan), zahlen: await zahlen(c.env, lan), tickets };
+    const [zeilen, ...z] = await lesen(c.env, [TICKET_SQL + " WHERE t.lan_id = ? ORDER BY t.created_at DESC", lan.id], ...zahlenAbfragen(lan.id));
+    return { lan: lanAus(lan), zahlen: zahlenAus(lan, z), tickets: zeilen.map(ticketAus) };
   },
 
   async adminBezahlt(c) {
@@ -1695,7 +1726,10 @@ async function mitZugang(env, t) {
 }
 
 async function zugangsdaten(env, t) {
-  const n = (await einstellungen(env)).netz;
+  return zugangAus(await einstellungen(env), t);
+}
+function zugangAus(e, t) {
+  const n = e.netz;
   return {
     benutzer: n.benutzer === "code" ? t.code.slice(0, 8) : t.nutzer.nick,
     passwort: t.otp, ssid: n.ssid, wlanPasswort: n.wlanPasswort, portal: n.portal, hinweis: n.hinweis,
@@ -1785,13 +1819,14 @@ async function mitgliedEntfernen(env, g, userId) {
 }
 
 async function gruppeDetail(env, gid, fuerUser, alsOrga) {
-  const g = await eins(env, "SELECT g.*, u.nick AS owner_nick FROM groups g JOIN users u ON u.id = g.owner_id WHERE g.id = ?", gid);
+  const [[g], mitglieder, sitze] = await lesen(env,
+    ["SELECT g.*, u.nick AS owner_nick FROM groups g JOIN users u ON u.id = g.owner_id WHERE g.id = ?", gid],
+    [`SELECT u.id, u.nick, t.status AS t_status, s.label AS sitz, s.group_id AS sitz_gruppe
+      FROM group_members gm JOIN users u ON u.id = gm.user_id
+      LEFT JOIN tickets t ON t.user_id = u.id AND t.lan_id = gm.lan_id AND t.status != 'storniert'
+      LEFT JOIN seats s ON s.id = t.seat_id WHERE gm.group_id = ? ORDER BY gm.created_at`, gid],
+    ["SELECT s.id, s.label, t.user_id AS t_user FROM seats s LEFT JOIN tickets t ON t.seat_id = s.id WHERE s.group_id = ? ORDER BY s.y, s.x", gid]);
   if (!g) return null;
-  const mitglieder = await alle(env, `SELECT u.id, u.nick, t.status AS t_status, s.label AS sitz, s.group_id AS sitz_gruppe
-    FROM group_members gm JOIN users u ON u.id = gm.user_id
-    LEFT JOIN tickets t ON t.user_id = u.id AND t.lan_id = gm.lan_id AND t.status != 'storniert'
-    LEFT JOIN seats s ON s.id = t.seat_id WHERE gm.group_id = ? ORDER BY gm.created_at`, gid);
-  const sitze = await alle(env, "SELECT s.id, s.label, t.user_id AS t_user FROM seats s LEFT JOIN tickets t ON t.seat_id = s.id WHERE s.group_id = ? ORDER BY s.y, s.x", gid);
   const aktiv = g.ablauf > Date.now();
   const besetzt = sitze.filter((s) => s.t_user).length;
   const darfCode = alsOrga || (fuerUser && mitglieder.some((m) => m.id === fuerUser));

@@ -1,4 +1,4 @@
-import { API_URL } from "./config.js?v=25";
+import { API_URL } from "./config.js?v=26";
 
 const TOKEN_KEY = "agelan-token";
 const params = new URLSearchParams(location.search);
@@ -9,7 +9,15 @@ let demoWorker = null;
 export function token() {
   try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
 }
+// Zählt jede Aktion, die Daten ändern kann. neuLaden() nutzt das, um gerade
+// geladene Daten wiederzuverwenden, solange sich nichts geändert hat.
+const NUR_LESEN = new Set(["oeffentlich", "ich", "sitzplan", "gaeste", "news", "ticketSeite", "preisVorschau", "checkinSuchen", "appToken",
+  "adminTickets", "adminGruppen", "adminTickettypen", "adminGutscheine", "adminLans", "adminEinstellungen", "adminBenutzer",
+  "adminProtokoll", "adminNetz", "adminVorlagen", "adminPortalTest"]);
+export let datenStand = 0;
+
 export function tokenSetzen(t) {
+  datenStand++;
   try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) { /* privat */ }
 }
 
@@ -27,10 +35,11 @@ export async function api(aktion, daten = {}) {
     headers: { "Content-Type": "application/json", ...(t ? { Authorization: "Bearer " + t } : {}) },
     body: JSON.stringify({ aktion, ...daten }),
   });
+  if (!NUR_LESEN.has(aktion)) datenStand++;
   let res;
   try {
     if (istDemo) {
-      if (!demoWorker) demoWorker = (await import("./demo.js?v=25")).starten();
+      if (!demoWorker) demoWorker = (await import("./demo.js?v=26")).starten();
       res = await (await demoWorker).fetch(req);
     } else {
       res = await fetch(req);
@@ -38,6 +47,7 @@ export async function api(aktion, daten = {}) {
   } catch (e) {
     throw new Error("Keine Verbindung zum Server. Bitte nochmal versuchen.");
   }
+  if (!NUR_LESEN.has(aktion)) datenStand++; // auch nach der Antwort: Ladevorgänge währenddessen gelten als veraltet
   const j = await res.json().catch(() => ({ error: "Antwort nicht lesbar (" + res.status + ")" }));
   if (!res.ok) {
     if (res.status === 401) { tokenSetzen(""); appAnmeldungEntfernen(); }

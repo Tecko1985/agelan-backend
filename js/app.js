@@ -1,17 +1,30 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY } from "./api.js?v=25";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=25";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=26";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=26";
 
 export const zustand = { daten: null, ich: null };
 
-export async function neuLaden() {
-  const [daten, ich] = await Promise.all([
-    api("oeffentlich"),
-    token() ? api("ich").catch(() => null) : Promise.resolve(null),
-  ]);
-  zustand.daten = daten;
-  zustand.ich = ich;
-  rahmenZeichnen();
-  return daten;
+// Lädt LAN-Daten und Konto. Fast jede Seite ruft das beim Öffnen auf – deshalb:
+// ein laufender Ladevorgang wird geteilt, und frisch geladene Daten (< 5 s, seitdem
+// keine ändernde Aktion) werden wiederverwendet. Spart beim Seitenwechsel 2 Anfragen.
+let laufend = null, laufendStand = -1, geladenAm = 0, geladenStand = -1;
+export function neuLaden() {
+  const stand = datenStand;
+  if (laufend && laufendStand === stand) return laufend;
+  if (zustand.daten && geladenStand === stand && Date.now() - geladenAm < 5000) return Promise.resolve(zustand.daten);
+  laufendStand = stand;
+  const ich = laufend = (async () => {
+    const [daten, konto] = await Promise.all([
+      api("oeffentlich"),
+      token() ? api("ich").catch(() => null) : Promise.resolve(null),
+    ]);
+    zustand.daten = daten;
+    zustand.ich = konto;
+    geladenAm = Date.now(); geladenStand = stand;
+    rahmenZeichnen();
+    return daten;
+  })();
+  ich.finally(() => { if (laufend === ich) laufend = null; }).catch(() => {});
+  return ich;
 }
 
 export const istOrga = () => !!zustand.ich && ["orga", "admin"].includes(zustand.ich.nutzer.rolle);
@@ -46,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=25")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=26")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -82,11 +95,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=25")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=25")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=25")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=25")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=25")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=26")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=26")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=26")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=26")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=26")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -166,7 +179,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=25");
+    const konto = await import("./konto.js?v=26");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
