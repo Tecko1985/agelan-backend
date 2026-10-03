@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=56";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=56";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=57";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl, drucken } from "./ui.js?v=57";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=56")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=57")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -79,7 +79,7 @@ function rahmenZeichnen() {
   $("#fuss").innerHTML = `
     <div><img src="img/logo.webp" alt="AGE LAN" width="64" height="64" style="margin-bottom:8px">
       <div>${esc(s.slogan)}</div><div class="klein leiser" style="margin-top:6px">© ${new Date().getFullYear()} AGE-LAN · Private Veranstaltung</div></div>
-    <div class="zeile" style="gap:18px"><a href="#/faq">FAQ</a><a href="#/packliste">Packliste</a><a href="#/seite/anfahrt">Anfahrt</a><a href="#/seite/agb">Teilnahmebedingungen</a><a href="#/seite/datenschutz">Datenschutz</a><a href="#/seite/impressum">Impressum</a></div>
+    <div class="zeile" style="gap:18px"><a href="#/faq">FAQ</a><a href="#/packliste">Packliste</a><a href="#/muttizettel">Muttizettel</a><a href="#/seite/anfahrt">Anfahrt</a><a href="#/seite/agb">Teilnahmebedingungen</a><a href="#/seite/datenschutz">Datenschutz</a><a href="#/seite/impressum">Impressum</a></div>
     <div class="socials">${socials}</div>`;
 }
 
@@ -91,16 +91,17 @@ const SEITEN = {
   lan: seiteLan,
   faq: seiteFaq,
   packliste: seitePackliste,
+  muttizettel: seiteMuttizettel,
   news: seiteNews,
   gaeste: seiteGaeste,
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=56")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=56")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=56")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=56")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=56")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=57")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=57")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=57")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=57")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=57")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -186,7 +187,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=56");
+    const konto = await import("./konto.js?v=57");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -303,7 +304,7 @@ async function seiteTickets(main) {
       <li><b>Bezahlen</b> – ${esc(arten.join(", "))}.${za.arten.paypal_direkt ? " Mit PayPal ist dein Ticket sofort bezahlt und du kannst direkt deinen Platz wählen." : ""}${za.arten.paypal || za.arten.ueberweisung ? ` Bei ${za.arten.paypal && za.arten.ueberweisung ? "PayPal (Freunde) und Überweisung" : za.arten.paypal ? "PayPal (Freunde)" : "Überweisung"} gib als Verwendungszweck deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes an.` : ""}${za.fristTage ? ` Bitte innerhalb von ${za.fristTage} Tagen.` : ""} ${za.arten.paypal_direkt ? "Bei Überweisung oder bar bestätigt die Orga dein Ticket, sobald das Geld da ist" : "Sobald das Geld da ist, bestätigt die Orga dein Ticket"} – erst dann ist dein Platz sicher.</li>
       <li><b>Platz aussuchen</b> im <a href="#/sitzplan">Sitzplan</a> – sobald dein Ticket bezahlt ist. Mit Freunden zusammen sitzen? Gründet vorher eine Reservierungsgruppe, merkt einen Block vor und teilt den Gruppen-Code.</li>
       <li><b>Packen.</b> Was du mitbringen solltest, steht in der <a href="#/packliste">Packliste</a>.</li>
-      <li><b>Check-in auf der LAN.</b> Zeig den QR-Code deines Tickets vor – auf dem Handy oder ausgedruckt. Unter 18? Dann bring den unterschriebenen Muttizettel und deine Aufsichtsperson mit.</li>
+      <li><b>Check-in auf der LAN.</b> Zeig den QR-Code deines Tickets vor – auf dem Handy oder ausgedruckt. Unter 18? Dann bring den unterschriebenen <a href="#/muttizettel">Muttizettel</a> und deine Aufsichtsperson mit.</li>
       <li><b>Loslegen.</b> Nach dem Check-in scannst du deinen Ticket-QR mit dem Handy oder öffnest dein Konto: Dort stehen deine Internet-Zugangsdaten, und über die AgeLan-App bestellst du Essen und meldest dich zu Turnieren an.</li>
     </ol></div></div>`;
   ticketKnoepfeVerdrahten(main);
@@ -369,7 +370,7 @@ const PACKLISTE = [
   ["🎒 Persönliches", [
     ["ticket", "Ticket (QR-Code auf dem Handy oder ausgedruckt)"],
     ["ausweis", "Personalausweis"],
-    ["muttizettel", "Unter 18: unterschriebener Muttizettel und Aufsichtsperson"],
+    ["muttizettel", "Unter 18: unterschriebener Muttizettel (Seite „Muttizettel“) und Aufsichtsperson"],
     ["bargeld", "Etwas Bargeld"],
     ["handy", "Handy mit Ladekabel"],
     ["kleidung", "Bequeme Kleidung und Wechselsachen"],
@@ -404,6 +405,47 @@ function seitePackliste(main) {
   }));
   $("#pk-reset", main).onclick = () => { haken = {}; speichern(); $$("[data-pack]", main).forEach((cb) => (cb.checked = false)); stand(); };
   stand();
+}
+
+// Muttizettel: Einverständnis der Eltern + Erklärung der Aufsichtsperson, zum Ausdrucken.
+// Angemeldete Gäste bekommen ihre eigenen Daten schon eingetragen.
+function muttizettelHtml(d, u) {
+  const lan = d.lan;
+  const leer = (w = "100%") => `<span style="display:inline-block;width:${w};border-bottom:1px solid #000;height:1.3em"></span>`;
+  const feld = (label, wert, w) => `<tr><td style="padding:5px 10px 5px 0;white-space:nowrap;vertical-align:bottom">${label}</td><td style="width:100%;padding:5px 0;vertical-align:bottom">${wert ? `<span style="display:block;border-bottom:1px solid #000;font-weight:600">${esc(wert)}</span>` : leer(w)}</td></tr>`;
+  const geb = u && u.geburtsdatum ? new Date(u.geburtsdatum + "T12:00:00").toLocaleDateString("de-DE") : "";
+  const unterschrift = (wer) => `<div style="flex:1"><div style="height:46px;border-bottom:1px solid #000"></div><div style="font-size:9pt;margin-top:3px">${wer}</div></div>`;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10.5pt;line-height:1.4;max-width:186mm;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px">
+      <div><div style="font-size:17pt;font-weight:700">Einverständniserklärung („Muttizettel“)</div>
+        <div>für Teilnehmende unter 18 Jahren · ${esc(lan.name)} · ${esc(zeitraum(lan.start, lan.ende))} · ${esc(lan.ort || "")}</div></div>
+      <img src="img/wappen.jpg" alt="" style="height:54px"></div>
+    <p style="margin:10px 0 4px">Bitte vollständig ausfüllen, unterschreiben und beim Check-in zusammen mit einem Ausweis vorlegen. Ohne diese Erklärung ist keine Teilnahme möglich. Teilnehmende unter 16 Jahren sind leider nicht zugelassen.</p>
+
+    <h3 style="font-size:11.5pt;margin:12px 0 2px">1. Teilnehmer/in (16 oder 17 Jahre)</h3>
+    <table style="width:100%;border-collapse:collapse">${feld("Vor- und Nachname", u ? (u.vorname + " " + u.nachname).trim() : "")}${feld("Geburtsdatum", geb)}${feld("Nickname", u ? u.nick : "")}${feld("Handynummer", "")}</table>
+
+    <h3 style="font-size:11.5pt;margin:12px 0 2px">2. Erziehungsberechtigte/r</h3>
+    <table style="width:100%;border-collapse:collapse">${feld("Vor- und Nachname", "")}${feld("Anschrift", "")}${feld("Telefon (während der LAN erreichbar)", "")}</table>
+    <p style="margin:6px 0">Ich bin/Wir sind erziehungsberechtigt und damit einverstanden, dass mein/unser Kind an der oben genannten LAN-Party einschließlich der Übernachtungen in der Halle teilnimmt. Für die Dauer der Veranstaltung übertrage(n) ich/wir die Aufsichtspflicht auf die unten genannte volljährige Aufsichtsperson. Mir/Uns ist bekannt, dass der Veranstalter keine Aufsichtspflicht übernimmt, dass die Teilnahmebedingungen und die Hausordnung gelten und dass mein/unser Kind bei groben Verstößen von der Veranstaltung verwiesen werden kann. In diesem Fall hole(n) ich/wir es ab oder sorge(n) für die Heimfahrt.</p>
+
+    <h3 style="font-size:11.5pt;margin:12px 0 2px">3. Volljährige Aufsichtsperson (nimmt selbst an der LAN teil)</h3>
+    <table style="width:100%;border-collapse:collapse">${feld("Vor- und Nachname", "")}${feld("Geburtsdatum", "", "45%")}${feld("Nickname auf der LAN", "")}${feld("Handynummer", "")}</table>
+    <p style="margin:6px 0">Ich bin volljährig, nehme selbst an der LAN teil und übernehme für die gesamte Dauer der Veranstaltung die Aufsichtspflicht für die oben genannte Person. Ich bin für die Orga während der LAN erreichbar.</p>
+
+    <div style="display:flex;gap:18px;margin-top:22px">${unterschrift("Ort, Datum")}${unterschrift("Unterschrift Erziehungsberechtigte/r")}</div>
+    <div style="display:flex;gap:18px;margin-top:18px">${unterschrift("Unterschrift zweite/r Erziehungsberechtigte/r (falls gemeinsames Sorgerecht)")}${unterschrift("Unterschrift Aufsichtsperson")}</div>
+    <div style="border:1px solid #000;padding:6px 8px;margin-top:16px;font-size:9pt">Vom Check-in auszufüllen: Ausweis Teilnehmer/in geprüft ☐ · Ausweis Aufsichtsperson geprüft ☐ · Kürzel Orga: ________</div>
+  </div>`;
+}
+async function seiteMuttizettel(main) {
+  const d = zustand.daten || await neuLaden();
+  const u = zustand.ich && zustand.ich.nutzer;
+  main.innerHTML = `<div class="wrap" style="max-width:860px"><div class="seitenkopf"><span class="ueberzeile">Unter 18</span><h1>Muttizettel</h1>
+    <p>Wer zur LAN 16 oder 17 Jahre alt ist, braucht diese Einverständniserklärung – unterschrieben von den Eltern und einer volljährigen Aufsichtsperson, die selbst an der LAN teilnimmt. Ausdrucken, ausfüllen und zum Check-in mitbringen.</p>
+    <div class="zeile"><button class="knopf primaer" data-mz-druck>Drucken / als PDF speichern</button>${u ? `<span class="klein leise">Deine Daten aus dem Konto sind schon eingetragen.</span>` : `<span class="klein leise">Angemeldet sind deine Daten schon eingetragen.</span>`}</div></div>
+    <div class="karte" style="background:#fff;padding:22px;overflow-x:auto">${muttizettelHtml(d, u)}</div></div>`;
+  $("[data-mz-druck]", main).onclick = () => drucken(muttizettelHtml(d, u), "A4");
 }
 
 const TEXTSEITEN = { anfahrt: "Anfahrt", impressum: "Impressum", datenschutz: "Datenschutz", agb: "Teilnahmebedingungen" };
@@ -528,6 +570,7 @@ async function seiteApp(main, bereich) {
 function mitLinks(text) {
   const a = (url, t) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`;
   return esc(text)
+    .replace(/\[([^\]\n]+)\]\((#\/[\w\/-]*)\)/g, (_, t, ziel) => `<a href="${ziel}">${t}</a>`)
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, url) => a(url, t))
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, vor, url) => vor + a(url, url));
 }

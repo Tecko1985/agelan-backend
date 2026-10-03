@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=56";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=56";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=56";
+import { api, tokenSetzen } from "./api.js?v=57";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=57";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=57";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -191,7 +191,7 @@ export async function render(main) {
           <div class="zeile"><button class="knopf primaer klein" data-ueb-ja="${a.id}" data-nick="${esc(a.nick)}">Ticket übergeben</button><button class="knopf klein geist" data-ueb-nein="${a.id}">Ablehnen</button></div></div>`).join("")}
         ${!t.checkinAt && !ueb.anfragen.length ? `<p class="leise klein" style="margin-top:12px">Du kannst nicht kommen? Gib dein Ticket weiter: Die Person, die es bekommen soll, trägt in ihrem Konto deinen Nickname <b>${esc(u.nick)}</b> ein. Danach bestätigst du hier.</p>` : ""}
         <a class="knopf klein geist" href="#/packliste" style="margin-top:14px">Packliste: Was brauche ich für die LAN?</a>
-        ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
+        ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit. <a class="knopf klein" href="#/muttizettel" style="margin-top:8px">Muttizettel ausdrucken</a></div>` : ""}
       </div>`;
     ticketUnten = `<div class="abschnitt-kopf" style="margin-top:36px"><div><span class="ueberzeile">Zum Vorzeigen beim Einlass</span><h2 style="margin:0">Dein Ticket</h2></div>
         <div class="zeile"><button class="knopf primaer" data-drucken>Drucken / als PDF</button>
