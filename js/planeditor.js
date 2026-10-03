@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=46";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=46";
-import { planSvg, planGroesse, U } from "./plan.js?v=46";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=46";
+import { api } from "./api.js?v=47";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=47";
+import { planSvg, planGroesse, U } from "./plan.js?v=47";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=47";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -69,7 +69,8 @@ export async function editor(container, lanId) {
         <span class="klein leise" data-reihe-naechster></span></div>
       <div class="gruppe"><label class="klein leise">Breite <input data-gr="breite" type="number" min="4" max="200" style="width:64px;padding:5px"></label>
         <label class="klein leise">Höhe <input data-gr="hoehe" type="number" min="4" max="200" style="width:64px;padding:5px"></label></div>
-      <div class="gruppe"><button class="knopf klein primaer" data-a="speichern">Speichern</button><button class="knopf klein geist" data-a="verwerfen">Verwerfen</button></div>
+      <div class="gruppe"><button class="knopf klein primaer" data-a="speichern">Speichern</button><button class="knopf klein geist" data-a="verwerfen">Verwerfen</button>
+        <button class="knopf klein" data-a="vorlagen" title="Sitzanordnung als Vorlage speichern oder eine Vorlage laden">Vorlagen</button></div>
     </div>
     <div class="plan-layout">
       <div class="plan-buehne" id="e-buehne" style="max-height:72vh"></div>
@@ -397,6 +398,43 @@ export async function editor(container, lanId) {
     toast("Kopiert – jetzt mit „Neu benennen“ sinnvolle Namen vergeben.");
   };
 
+  // ---- Vorlagen: aktuelle Anordnung speichern oder eine gespeicherte laden ----
+  const planSpeichern = async () => {
+    const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt }) => ({ id, label, x, y, gesperrt })) });
+    st.geaendert = false;
+    return r;
+  };
+  const vorlagenDialog = async () => {
+    const { vorlagen } = await api("adminVorlagen");
+    const m = modal("Sitzplan-Vorlagen", `<div class="stapel">
+      <form class="karte formular" data-v-neu style="margin:0"><h3 style="margin:0">Aktuelle Anordnung als Vorlage speichern</h3>
+        <div class="zeile" style="align-items:flex-end"><label class="feld" style="flex:1;min-width:180px;margin:0"><span>Name</span><input name="name" required placeholder="z. B. Nordhessenhalle 148"></label>
+          <button class="knopf primaer">Speichern</button></div>
+        ${st.geaendert ? `<p class="klein gold" style="margin:0">Du hast ungespeicherte Änderungen – sie werden dabei zuerst in den Sitzplan gespeichert.</p>` : ""}</form>
+      <div class="karte" style="margin:0"><h3 style="margin:0 0 8px">Vorlage laden</h3>
+        <p class="klein leise" style="margin:0 0 10px">Ersetzt den Plan dieser LAN komplett. Geht nur, solange noch kein Gast einen Platz hat.</p>
+        ${vorlagen.length ? vorlagen.map((v) => `<div class="zeile zwischen" style="padding:8px 0;border-top:1px solid var(--rand)">
+          <span><b>${esc(v.name)}</b> <span class="klein leise">${v.sitze} Plätze${v.gesperrt ? ", " + v.gesperrt + " gesperrt" : ""}</span></span>
+          <button class="knopf klein" data-v-laden="${v.id}">Laden</button></div>`).join("") : `<div class="leise klein">Noch keine Vorlagen gespeichert.</div>`}</div></div>`, { breit: true });
+    const f = $("[data-v-neu]", m.el);
+    f.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", f), async () => {
+      const name = f.name.value.trim();
+      if (vorlagen.some((v) => v.name.toLowerCase() === name.toLowerCase()) && !(await bestaetigen(`Die Vorlage „${name}“ gibt es schon. Überschreiben?`, { ja: "Überschreiben" }))) return;
+      if (st.geaendert) await planSpeichern();
+      await api("adminVorlageSpeichern", { lanId, name });
+      m.schliessen(); toast("Vorlage „" + name + "“ gespeichert.", "ok"); eigenschaften();
+    }); };
+    $$("[data-v-laden]", m.el).forEach((k) => (k.onclick = async () => {
+      const v = vorlagen.find((x) => x.id === Number(k.dataset.vLaden));
+      if (!(await bestaetigen(`Plan durch die Vorlage „${v.name}“ ersetzen?${st.geaendert ? " Deine ungespeicherten Änderungen gehen dabei verloren." : ""}`, { ja: "Laden", gefahr: true }))) return;
+      mitSperre(k, async () => {
+        await api("adminVorlageAnwenden", { lanId, vorlageId: v.id });
+        m.schliessen(); toast("Vorlage „" + v.name + "“ geladen.", "ok");
+        st.geaendert = false; ich.abbau(); editor(container, lanId);
+      });
+    }));
+  };
+
   // ---- Leiste ----
   $$("[data-w]", container).forEach((b) => (b.onclick = () => { st.werkzeug = b.dataset.w; zeichnen(); if (b.dataset.w === "setzen") $("[data-reihe]", container).focus(); }));
   $("[data-reihe]", container).oninput = reiheHinweis;
@@ -407,6 +445,7 @@ export async function editor(container, lanId) {
     else if (a === "alle") { st.auswahl = new Set([...st.sitze.map((s) => s.id), ...st.plan.deko.map((d) => d.id)]); zeichnen(); }
     else if (a === "zoom-" || a === "zoom+") { st.zoom = Math.min(2.5, Math.max(0.4, st.zoom + (a === "zoom+" ? 0.2 : -0.2))); zeichnen(); }
     else if (a === "verwerfen") { if (!st.geaendert || await bestaetigen("Alle ungespeicherten Änderungen verwerfen?", { ja: "Verwerfen", gefahr: true })) { ich.abbau(); editor(container, lanId); } }
+    else if (a === "vorlagen") mitSperre(b, () => vorlagenDialog());
     else if (a === "speichern") mitSperre(b, async () => {
       const r = await api("adminPlanSpeichern", { lanId, plan: st.plan, sitze: st.sitze.map(({ id, label, x, y, gesperrt }) => ({ id, label, x, y, gesperrt })) });
       st.geaendert = false;
