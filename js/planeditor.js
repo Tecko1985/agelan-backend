@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=59";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=59";
-import { planSvg, planGroesse, U } from "./plan.js?v=59";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=59";
+import { api } from "./api.js?v=60";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=60";
+import { planSvg, planGroesse, U } from "./plan.js?v=60";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=60";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -73,7 +73,7 @@ export async function editor(container, lanId) {
         <button class="knopf klein" data-a="vorlagen" title="Sitzanordnung als Vorlage speichern oder eine Vorlage laden">Vorlagen</button>
         <button class="werkzeug" data-a="stages" title="Plätze nach Stage einfärben (grün 1, blau 2, lila 3, orange 4). Stage eines Platzes rechts unter „Platz“ ändern.">Stages</button></div>
     </div>
-    <div class="plan-layout">
+    <div class="plan-layout editor-layout">
       <div class="plan-buehne" id="e-buehne" style="max-height:72vh"></div>
       <aside class="stapel"><div class="karte" id="e-eigenschaften"></div>
         <div class="karte klein leise"><b style="color:var(--text)">Tipps</b><br>Shift+Klick: Auswahl erweitern · Pfeiltasten: verschieben · Entf: löschen · Strg+Z: rückgängig.
