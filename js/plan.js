@@ -1,10 +1,10 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=48";
+import { esc } from "./ui.js?v=49";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
 const STATUS_TEXT = { frei: "Frei", belegt: "Belegt", gruppe: "Von Gruppe vorgemerkt", gesperrt: "Gesperrt", ausbau: "Noch nicht freigeschaltet" };
-const statusText = (s) => (s.status === "ausbau" ? `Folgt in Ausbaustufe ${s.stufe || 2}` : STATUS_TEXT[s.status] || "");
+const statusText = (s) => (s.status === "ausbau" ? `Folgt in Stage ${s.stufe || 2}` : STATUS_TEXT[s.status] || "");
 
 export function dekoSvg(d, klasse = "") {
   const x = d.x * U, y = d.y * U, w = d.w * U, h = d.h * U;
@@ -103,7 +103,7 @@ export function tooltipAnbinden(container, sitzVonId) {
 }
 
 export function legendeHtml(mitAusbau = false) {
-  return `<div class="legende">${mitAusbau ? `<div><i class="l-ausbau"></i>Folgt in einer späteren Ausbaustufe</div>` : ""}
+  return `<div class="legende">${mitAusbau ? `<div><i class="l-ausbau"></i>Folgt in einer späteren Stage</div>` : ""}
     <div><i class="l-frei"></i>Frei</div><div><i class="l-belegt"></i>Belegt</div><div><i class="l-tisch"></i>Doppeltisch – zusammenhängende Plätze (A1 + A2)</div>
     <div><i class="l-gruppe"></i>Von einer Gruppe vorgemerkt</div><div><i class="l-meinegruppe"></i>Meine Gruppe</div><div><i class="l-meins"></i>Mein Platz</div><div><i class="l-gesperrt"></i>Gesperrt</div></div>`;
 }

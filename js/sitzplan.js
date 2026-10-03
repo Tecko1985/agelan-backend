@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=48";
-import { zustand, neuLaden, beimVerlassen } from "./app.js?v=48";
-import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=48";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=48";
+import { api } from "./api.js?v=49";
+import { zustand, neuLaden, beimVerlassen } from "./app.js?v=49";
+import { esc, $, $$, toast, fehler, bestaetigen, mitSperre } from "./ui.js?v=49";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzKarte, U } from "./plan.js?v=49";
 
 // Handy/Tablet ohne Maus: kein Überfahren, nur Antippen.
 const beruehrung = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
@@ -66,7 +66,7 @@ export async function render(main, param) {
     const jetzt = daten.sitze.filter((s) => !s.gesperrt && (s.stufe || 1) <= aktiv).length;
     const gesamt = daten.sitze.filter((s) => !s.gesperrt).length;
     ziel.innerHTML = `<div class="ausbau-hinweis"><div class="stufen-leiste">${Array.from({ length: maxStufe }, (_, i) => `<i class="${i < aktiv ? "an" : ""}"></i>`).join("")}</div>
-      <span><b>Ausbaustufe ${Math.min(aktiv, maxStufe)} von ${maxStufe}</b>: ${jetzt} Plätze buchbar.${aktiv < maxStufe ? ` Sind sie vergeben, schalten wir weitere frei – bis zu ${gesamt} Plätze.` : ""}</span></div>`;
+      <span><b>Stage ${Math.min(aktiv, maxStufe)} von ${maxStufe}</b>: ${jetzt} Plätze buchbar.${aktiv < maxStufe ? ` Sind sie vergeben, schalten wir weitere frei – bis zu ${gesamt} Plätze.` : ""}</span></div>`;
   };
 
   const seiteZeichnen = () => {
@@ -116,7 +116,7 @@ export async function render(main, param) {
     const t = ich.ticket;
     if (!t || !t.typ.mitSitz || s.meins) return;
     if (t.status !== "bezahlt") { toast("Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat."); return; }
-    if (s.status === "ausbau") { toast("Platz " + s.label + " wird erst mit Ausbaustufe " + (s.stufe || 2) + " freigeschaltet."); return; }
+    if (s.status === "ausbau") { toast("Platz " + s.label + " wird erst mit Stage " + (s.stufe || 2) + " freigeschaltet."); return; }
     const nehmbar = s.status === "frei" || (s.status === "gruppe" && s.meineGruppe);
     if (!nehmbar) { toast(s.status === "gruppe" ? "Dieser Platz ist für die Gruppe „" + s.gruppe + "“ vorgemerkt." : "Platz " + s.label + " ist nicht frei."); return; }
     if (t.checkinAt) { toast("Nach dem Check-in ändert nur die Orga deinen Platz."); return; }

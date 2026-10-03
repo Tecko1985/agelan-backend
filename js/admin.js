@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=48";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=48";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=48";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=48";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=48";
+import { api, istDemo } from "./api.js?v=49";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=49";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=49";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=49";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=49";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=48");
+    const { ticketHtml } = await import("./konto.js?v=49");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=48");
+  planModul = await import("./planeditor.js?v=49");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -549,7 +549,7 @@ async function lans(box) {
     <div class="tabelle-wrap"><table><thead><tr><th>Name</th><th>Zeitraum</th><th>Verkauf</th><th class="zahl">Limit</th><th class="zahl">Gäste</th><th></th></tr></thead><tbody>
     ${ls.map((l) => `<tr><td><b>${esc(l.name)}</b> ${l.aktiv ? `<span class="abzeichen gold">aktiv</span>` : ""}</td><td>${esc(zeitraum(l.start, l.ende))}</td><td>${l.verkaufOffen ? "offen" : "zu"}</td>
       <td class="zahl">${l.gaesteLimit}</td><td class="zahl">${l.zahlen.gaeste} (${l.zahlen.bezahlt} bez.)</td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-stufen="${l.id}">Ausbaustufen</button> <button class="knopf klein" data-sitze="${l.id}">Plätze sperren</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button>${l.aktiv ? "" : ` <button class="knopf klein rot" data-lloeschen="${l.id}" title="LAN löschen">Löschen</button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="knopf klein" data-stufen="${l.id}">Stages</button> <button class="knopf klein" data-sitze="${l.id}">Plätze sperren</button> <button class="knopf klein" data-bearbeiten="${l.id}">Bearbeiten</button>${l.aktiv ? "" : ` <button class="knopf klein rot" data-lloeschen="${l.id}" title="LAN löschen">Löschen</button>`}</td></tr>`).join("")}
     </tbody></table></div><p class="klein leise" style="margin-top:8px">Die aktive LAN ist die, die auf der Website erscheint. Eine neue LAN übernimmt die Ticketsorten der aktiven; den Sitzplan wählst du beim Anlegen (wie die aktive LAN, aus einer Vorlage oder leer).</p>
     <div class="karte" style="margin-top:18px"><h3>Sitzplan-Vorlagen</h3>
       <p class="klein leise" style="margin:0 0 10px">Eine Vorlage speichert Fläche, Beschriftungen und alle Plätze samt Sperren. Speichern: im LAN-Fenster unter „Sitzplan“.</p>
@@ -573,7 +573,7 @@ async function lans(box) {
       <div class="zeile"><label class="check"><input type="checkbox" name="verkaufOffen" ${l.verkaufOffen ? "checked" : ""}> Ticketverkauf offen</label><label class="check"><input type="checkbox" name="aktiv" ${l.aktiv ? "checked" : ""}> Aktive LAN (auf der Website)</label></div>
       <div class="fehler-text"></div><button class="knopf primaer">Speichern</button></form>
       ${l.id ? `<div class="karte" style="margin-top:18px"><h3>Sitzplan</h3>
-        <div class="zeile"><button type="button" class="knopf" data-l-stufen>Ausbaustufen</button><button type="button" class="knopf" data-l-sitze>Plätze sperren</button><button type="button" class="knopf" data-l-editor>Im Sitzplan-Editor öffnen</button></div>
+        <div class="zeile"><button type="button" class="knopf" data-l-stufen>Stages</button><button type="button" class="knopf" data-l-sitze>Plätze sperren</button><button type="button" class="knopf" data-l-editor>Im Sitzplan-Editor öffnen</button></div>
         <div class="zeile" style="margin-top:12px;align-items:flex-end">
           <label class="feld" style="flex:1;min-width:180px;margin:0"><span>Als Vorlage speichern</span><input data-v-name placeholder="Name, z. B. Nordhessenhalle 120"></label>
           <button type="button" class="knopf" data-v-speichern>Speichern</button></div>
@@ -643,16 +643,16 @@ async function stufenBearbeiten(l, fertig) {
   const reihe = (s) => (s.label.match(/^[^\d]+/) || [s.label])[0];
   let werkzeug = 1;
   const maxStufe = () => Math.max(1, ...stufe.values());
-  const m = modal("Ausbaustufen: " + l.name, `<div class="stapel">
-    <p class="klein leise" style="margin:0">Jeder Platz gehört zu einer Stufe. Stufe 1 ist von Anfang an buchbar, höhere Stufen kommen dazu, wenn mehr Gäste kommen. Gäste sehen noch nicht freigeschaltete Plätze gestrichelt mit „folgt in Ausbaustufe …“.</p>
+  const m = modal("Stages: " + l.name, `<div class="stapel">
+    <p class="klein leise" style="margin:0">Jeder Platz gehört zu einer Stage. Stage 1 ist von Anfang an buchbar, weitere Stages kommen dazu, wenn mehr Gäste kommen. Gäste sehen noch nicht freigeschaltete Plätze gestrichelt mit „folgt in Stage …“.</p>
     <div class="zeile" style="gap:6px;align-items:center"><span class="klein leise">Plätzen zuordnen:</span><span data-werkzeuge class="zeile" style="gap:6px"></span>
       <label class="check klein" style="margin-left:6px"><input type="checkbox" data-reihe> ganze Reihe</label>
       <span style="flex:1"></span><button class="knopf klein" data-z="-1" title="Verkleinern">−</button><button class="knopf klein" data-z="1" title="Vergrößern">+</button></div>
     <div class="plan-buehne stufen-plan" id="sb-buehne" style="max-height:52vh;max-height:52dvh"></div>
     <div class="karte" style="margin:0;padding:12px 16px"><div id="sb-uebersicht" class="klein"></div></div>
     <div class="zeile" style="align-items:center">
-      <label class="klein">Aktiv bis Stufe <select data-aktiv style="width:auto;margin-left:6px"></select></label>
-      <label class="check klein"><input type="checkbox" data-auto ${auto ? "checked" : ""}> Automatisch die nächste Stufe freischalten, wenn die aktive ausverkauft ist</label></div>
+      <label class="klein">Aktiv bis Stage <select data-aktiv style="width:auto;margin-left:6px"></select></label>
+      <label class="check klein"><input type="checkbox" data-auto ${auto ? "checked" : ""}> Automatisch die nächste Stage freischalten, wenn die aktive ausverkauft ist</label></div>
     <div class="zeile"><button class="knopf primaer" data-ok>Speichern</button><button class="knopf geist" data-ab>Abbrechen</button><span class="klein leise" id="sb-aend"></span></div></div>`, { breit: true });
   const buehne = $("#sb-buehne", m.el);
   let zoom = Math.min(1.4, Math.max(0.45, (buehne.clientWidth - 30) / (planGroesse(daten.plan, daten.sitze).breite * U + 12)));
@@ -661,19 +661,19 @@ async function stufenBearbeiten(l, fertig) {
     const ms = Math.max(maxStufe(), aktiv);
     // Werkzeug-Knöpfe: vorhandene Stufen + eine neue
     $("[data-werkzeuge]", m.el).innerHTML = Array.from({ length: Math.min(9, ms + 1) }, (_, i) => i + 1)
-      .map((n) => `<button class="knopf klein stufe-knopf st-${n} ${n === werkzeug ? "primaer" : ""}" data-w="${n}">${n > maxStufe() ? "+ Stufe " + n : "Stufe " + n}</button>`).join("");
+      .map((n) => `<button class="knopf klein stufe-knopf st-${n} ${n === werkzeug ? "primaer" : ""}" data-w="${n}">${n > maxStufe() ? "+ Stage " + n : "Stage " + n}</button>`).join("");
     $$("[data-w]", m.el).forEach((b) => (b.onclick = () => { werkzeug = Number(b.dataset.w); stand(); }));
     const frei = daten.sitze.filter((s) => !s.gesperrt);
     let summe = 0;
     $("#sb-uebersicht", m.el).innerHTML = Array.from({ length: maxStufe() }, (_, i) => i + 1).map((n) => {
       const neu = frei.filter((s) => stufe.get(s.id) === n).length;
       summe += neu;
-      return `<div class="zeile zwischen" style="padding:4px 0"><span><span class="stufe-knopf st-${n}" style="border:1px solid var(--rand);padding:0 8px;border-radius:3px">Stufe ${n}</span> +${neu} Plätze</span>
+      return `<div class="zeile zwischen" style="padding:4px 0"><span><span class="stufe-knopf st-${n}" style="border:1px solid var(--rand);padding:0 8px;border-radius:3px">Stage ${n}</span> +${neu} Plätze</span>
         <span>${n <= aktiv ? '<b class="gruen">freigeschaltet</b>' : '<span class="leise">noch zu</span>'} · zusammen <b>${summe}</b></span></div>`;
-    }).join("") + (daten.sitze.length > frei.length ? `<div class="leise" style="margin-top:4px">${daten.sitze.length - frei.length} gesperrte Plätze zählen in keiner Stufe.</div>` : "")
+    }).join("") + (daten.sitze.length > frei.length ? `<div class="leise" style="margin-top:4px">${daten.sitze.length - frei.length} gesperrte Plätze zählen in keiner Stage.</div>` : "")
       + `<div class="leise" style="margin-top:4px">Verkaufte Sitzplatz-Tickets zählen gegen die freigeschalteten Plätze; das Gäste-Limit der LAN (${l.gaesteLimit}) begrenzt zusätzlich.</div>`;
     const sel = $("[data-aktiv]", m.el);
-    sel.innerHTML = Array.from({ length: maxStufe() }, (_, i) => `<option value="${i + 1}" ${i + 1 === aktiv ? "selected" : ""}>Stufe ${i + 1}</option>`).join("");
+    sel.innerHTML = Array.from({ length: maxStufe() }, (_, i) => `<option value="${i + 1}" ${i + 1 === aktiv ? "selected" : ""}>Stage ${i + 1}</option>`).join("");
     const n = [...stufe].filter(([id, v]) => vorher.get(id) !== v).length;
     $("#sb-aend", m.el).textContent = n ? `${n} Plätze geändert – noch nicht gespeichert` : "";
   };
@@ -707,7 +707,7 @@ async function stufenBearbeiten(l, fertig) {
   ok.onclick = () => mitSperre(ok, async () => {
     const sitze = [...stufe].filter(([id, v]) => vorher.get(id) !== v).map(([id, v]) => ({ id, stufe: v }));
     const r = await api("adminStufenSpeichern", { lanId: l.id, sitze, aktiv: Math.min(aktiv, maxStufe()), auto });
-    toast(r.stufeAktiv > aktiv ? `Gespeichert – automatisch auf Stufe ${r.stufeAktiv} geschaltet, weil Stufe ${aktiv} schon voll ist.` : "Ausbaustufen gespeichert.", "ok");
+    toast(r.stufeAktiv > aktiv ? `Gespeichert – automatisch auf Stage ${r.stufeAktiv} geschaltet, weil Stage ${aktiv} schon voll ist.` : "Stages gespeichert.", "ok");
     m.schliessen();
     if (fertig) fertig();
   });
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=48");
+    const { ticketHtml } = await import("./konto.js?v=49");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }

@@ -978,7 +978,7 @@ const AKTIONEN = {
         LEFT JOIN tickets t ON t.seat_id = s.id LEFT JOIN groups g2 ON g2.id = s.group_id WHERE s.id = ? AND s.lan_id = ?`, id, g.lan_id);
       if (!s) throw new F(404, "Einen der Plätze gibt es nicht.");
       if (s.gesperrt) throw new F(409, "Platz " + s.label + " ist gesperrt.");
-      if ((s.stufe || 1) > ((glan && glan.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Ausbaustufe " + s.stufe + " freigeschaltet.");
+      if ((s.stufe || 1) > ((glan && glan.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Stage " + s.stufe + " freigeschaltet.");
       if (s.t_user && !mitglieder.includes(s.t_user)) throw new F(409, "Platz " + s.label + " ist schon belegt.");
       if (s.group_id && s.group_id !== g.id && s.g_ablauf > jetzt) throw new F(409, "Platz " + s.label + " ist von einer anderen Gruppe vorgemerkt.");
     }
@@ -1429,12 +1429,12 @@ const AKTIONEN = {
     const stmts = [];
     for (const z of (Array.isArray(body.sitze) ? body.sitze : []).slice(0, 3000)) {
       const stufe = Math.round(Number(z.stufe));
-      if (!(stufe >= 1 && stufe <= 9)) throw new F(400, "Ausbaustufe muss zwischen 1 und 9 liegen.");
+      if (!(stufe >= 1 && stufe <= 9)) throw new F(400, "Stage muss zwischen 1 und 9 liegen.");
       stmts.push(st(env, "UPDATE seats SET stufe = ? WHERE id = ? AND lan_id = ?", stufe, String(z.id), lan.id));
     }
     if (body.aktiv != null) {
       const aktiv = Math.round(Number(body.aktiv));
-      if (!(aktiv >= 1 && aktiv <= 9)) throw new F(400, "Aktive Stufe muss zwischen 1 und 9 liegen.");
+      if (!(aktiv >= 1 && aktiv <= 9)) throw new F(400, "Aktive Stage muss zwischen 1 und 9 liegen.");
       stmts.push(st(env, "UPDATE lans SET stufe_aktiv = ? WHERE id = ?", aktiv, lan.id));
     }
     if (body.auto != null) stmts.push(st(env, "UPDATE lans SET stufe_auto = ? WHERE id = ?", body.auto ? 1 : 0, lan.id));
@@ -1838,7 +1838,7 @@ async function sitzSetzen(env, ticketId, userId, lanId, sitzId, durchOrga) {
   if (s.gesperrt && !durchOrga) throw new F(409, "Dieser Platz ist gesperrt.");
   if (!durchOrga && (s.stufe || 1) > 1) {
     const l = await eins(env, "SELECT stufe_aktiv FROM lans WHERE id = ?", lanId);
-    if ((s.stufe || 1) > ((l && l.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Ausbaustufe " + s.stufe + " freigeschaltet.");
+    if ((s.stufe || 1) > ((l && l.stufe_aktiv) || 1)) throw new F(409, "Platz " + s.label + " wird erst mit Stage " + s.stufe + " freigeschaltet.");
   }
   const belegt = await eins(env, "SELECT id FROM tickets WHERE seat_id = ?", sitzId);
   if (belegt && belegt.id !== ticketId) throw new F(409, "Platz " + s.label + " ist schon vergeben.");
