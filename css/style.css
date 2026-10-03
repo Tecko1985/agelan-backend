@@ -172,8 +172,42 @@ input[type="checkbox"], input[type="radio"] { width: auto; accent-color: var(--g
 .eckdaten-innen { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
 .eckdaten h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 3.4rem); color: var(--gold2); }
 .eck-zeile { margin: 4px 0 0; font-size: 1.1rem; }
-.countdown { margin: 6px 0 0; color: var(--leise); }
-.countdown b { color: var(--text); }
+/* ---------- Startseite: Hero mit Wappen ---------- */
+.hero { position: relative; padding: 70px 0 60px; overflow: hidden; border-bottom: 1px solid var(--rand); isolation: isolate; }
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background:
+    radial-gradient(600px 380px at 75% 40%, rgba(216, 52, 63, 0.28), transparent 70%),
+    radial-gradient(500px 300px at 20% 70%, rgba(232, 182, 76, 0.14), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30 0L60 30L30 60L0 30Z' fill='none' stroke='%23ffffff' stroke-opacity='0.035'/%3E%3C/svg%3E");
+}
+.hero-innen { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.hero h1 { font-size: clamp(2.6rem, 7vw, 5.2rem); margin-bottom: 0.15em; background: linear-gradient(180deg, #fff6dc, var(--gold) 60%, #b07b1f); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 30px rgba(232, 182, 76, 0.25)); }
+.chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; background: var(--karte2); border: 1px solid var(--rand); font-weight: 500; font-size: 0.93rem; }
+.hero-wappen { justify-self: center; position: relative; width: min(340px, 80vw); aspect-ratio: 1; display: grid; place-items: center; }
+.hero-wappen::before { content: ""; position: absolute; inset: 8%; border-radius: 50%; background: radial-gradient(circle, rgba(232, 182, 76, 0.35), transparent 65%); filter: blur(20px); animation: pulsieren 5s ease-in-out infinite; }
+.hero-wappen img { width: 72%; border-radius: 50%; position: relative; box-shadow: 0 0 0 2px var(--rand2), 0 0 0 10px rgba(232, 182, 76, 0.06), 0 30px 80px rgba(0, 0, 0, 0.6); }
+.hero-wappen .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(232, 182, 76, 0.25); animation: drehen 60s linear infinite; }
+@keyframes pulsieren { 50% { opacity: 0.6; transform: scale(0.95); } }
+@keyframes drehen { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .hero-wappen::before, .hero-wappen .ring { animation: none; } }
+@media (max-width: 860px) { .hero-innen { grid-template-columns: minmax(0, 1fr); } .hero-wappen { order: -1; width: 200px; } .hero { padding-top: 36px; } }
+.countdown { display: flex; gap: 10px; margin-bottom: 28px; flex-wrap: wrap; }
+.countdown div { min-width: 74px; text-align: center; padding: 12px 8px 10px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--rand); border-radius: 12px; }
+.countdown b { display: block; font: 700 1.8rem/1 var(--serif); color: var(--gold2); }
+.countdown span { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--leise); }
+@media (max-width: 420px) { .countdown div { min-width: 0; flex: 1; } }
+.highlight { display: flex; gap: 14px; align-items: flex-start; }
+.highlight .ico { font-size: 1.6rem; width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 14px; background: rgba(232, 182, 76, 0.08); border: 1px solid var(--rand2); }
+.highlight h3 { font-size: 1.02rem; margin: 4px 0 2px; }
+.highlight p { margin: 0; color: var(--leise); font-size: 0.9rem; }
+.news-karte { display: flex; flex-direction: column; color: var(--text); transition: 0.2s; }
+.news-karte:hover { transform: translateY(-3px); border-color: var(--rand2); color: var(--text); }
+.news-datum { display: flex; gap: 10px; align-items: center; color: var(--gold); font-weight: 600; font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+.news-karte h3 { font-size: 1.1rem; }
+.news-karte p { color: var(--leise); font-size: 0.92rem; flex: 1; }
+.app-kachel .ico { font-size: 1.8rem; line-height: 1; margin-bottom: 4px; }
 .lan-kurz { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
 .lan-kurz figure { margin: 0; }
 .lan-kurz img { width: 100%; border-radius: var(--radius); display: block; }

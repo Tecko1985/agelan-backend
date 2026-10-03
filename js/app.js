@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=26";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=26";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=27";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=27";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=26")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=27")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -95,11 +95,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=26")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=26")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=26")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=26")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=26")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=27")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=27")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=27")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=27")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=27")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -162,6 +162,12 @@ function datumKurz(iso) {
   return `${t}.${m}.${j}`;
 }
 
+function newsKarte(n) {
+  const d = newsDatum(n.datum);
+  return `<a class="karte news-karte" href="#/news/${n.id}"><div class="news-datum"><span>${d.tag}. ${d.monat} ${d.jahr}</span></div>
+    <h3>${esc(n.titel)}</h3><p>${esc(n.teaser)}</p><span class="klein gold">Weiterlesen →</span></a>`;
+}
+
 function newsZeile(n) {
   return `<a class="news-zeile" href="#/news/${n.id}"><time>${datumKurz(n.datum)}</time><div><b>${esc(n.titel)}</b>${n.teaser && n.teaser !== n.titel ? `<span>${esc(n.teaser)}</span>` : ""}</div></a>`;
 }
@@ -179,7 +185,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=26");
+    const konto = await import("./konto.js?v=27");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -190,23 +196,23 @@ function countdownStarten(root, start) {
   if (!box) return;
   const tick = () => {
     const rest = ziel - Date.now();
-    if (rest <= 0) { box.textContent = "Die LAN läuft."; return; }
-    const t = Math.floor(rest / 864e5), h = Math.floor(rest / 36e5) % 24, m = Math.floor(rest / 6e4) % 60;
-    box.innerHTML = `Noch <b>${t}</b> Tage, <b>${h}</b> Std. und <b>${m}</b> Min.`;
+    if (rest <= 0) { box.innerHTML = `<div style="min-width:auto;padding:12px 18px"><b>⚔️ Die LAN läuft!</b></div>`; return; }
+    const t = Math.floor(rest / 864e5), h = Math.floor(rest / 36e5) % 24, m = Math.floor(rest / 6e4) % 60, sek = Math.floor(rest / 1e3) % 60;
+    box.innerHTML = [[t, "Tage"], [h, "Std"], [m, "Min"], [sek, "Sek"]].map(([w, l]) => `<div><b>${String(w).padStart(2, "0")}</b><span>${l}</span></div>`).join("");
   };
   tick();
-  const iv = setInterval(tick, 30000);
+  const iv = setInterval(tick, 1000);
   beimVerlassen(() => clearInterval(iv), root);
 }
 
 // Eingecheckt? Dann gehört die LAN-Zentrale ganz nach oben: Platz, Internet,
 // und der direkte Weg in die AgeLan-App (Essen, Frühstück, Turniere, Stream).
 const APP_KACHELN = [
-  ["essen", "Essen bestellen", "Speisekarte, Sonderwünsche, abholen"],
-  ["fruehstueck", "Frühstück", "Für morgen früh vorbestellen"],
-  ["turnier", "Turniere", "Eintragen, Spielplan, Ergebnisse"],
-  ["stream", "Stream", "Sendeplan und Showmatches"],
-  ["downloads", "Downloads", "Klickzähler und Map-Pack"],
+  ["essen", "Essen bestellen", "Speisekarte, Sonderwünsche, abholen", "🍕"],
+  ["fruehstueck", "Frühstück", "Für morgen früh vorbestellen", "🥐"],
+  ["turnier", "Turniere", "Eintragen, Spielplan, Ergebnisse", "🏆"],
+  ["stream", "Stream", "Sendeplan und Showmatches", "📺"],
+  ["downloads", "Downloads", "Klickzähler und Map-Pack", "💾"],
 ];
 function lanZentraleHtml(ich) {
   const t = ich && ich.ticket;
@@ -219,8 +225,8 @@ function lanZentraleHtml(ich) {
       <div class="lz-sitz">${t.sitz ? `Platz <b>${esc(t.sitz)}</b>` : esc(t.typ.name)}${t.gruppe ? ` · ${esc(t.gruppe)}` : ""}</div>
     </div>
     <div class="lz-raster">
-      <div class="lz-kacheln">${APP_KACHELN.map(([b, titel, text]) => `<a class="app-kachel" href="#/app/${b}"><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
-      <div class="lz-netz"><h3>Internet</h3>
+      <div class="lz-kacheln">${APP_KACHELN.map(([b, titel, text, ico]) => `<a class="app-kachel" href="#/app/${b}"><span class="ico">${ico}</span><b>${titel}</b><small>${text}</small></a>`).join("")}</div>
+      <div class="lz-netz"><h3>🌐 Internet</h3>
         ${feld("WLAN", z.ssid)}${feld("WLAN-Passwort", z.wlanPasswort)}${feld("Benutzer", z.benutzer)}${feld("Passwort", z.passwort)}
         ${sichereUrl(z.portal) ? `<a class="knopf klein primaer" href="${esc(sichereUrl(z.portal))}" target="_blank" rel="noopener" style="margin-top:10px">Zum Anmelde-Portal</a>` : ""}</div>
     </div></div></section>`;
@@ -233,43 +239,50 @@ function eckdatenListe(e) {
 async function seiteStart(main) {
   const d = await neuLaden();
   const { lan, zahlen: z, einstellungen: e } = d;
-  const ort = [lan.ort, lan.adresse].filter(Boolean).join(", ");
+  const discord = sichereUrl(e.seite.socials && e.seite.socials.discord);
   main.innerHTML = lanZentraleHtml(zustand.ich) + `
-  <div class="kopfbild"><img src="img/header.webp" alt="${esc(lan.name)} – Age of Empires 2 LAN"></div>
-  <section class="eckdaten"><div class="wrap">
-    <div class="eckdaten-innen">
-      <div>
-        <h1>${esc(lan.name)}</h1>
-        <p class="eck-zeile">${esc(zeitraum(lan.start, lan.ende))}${ort ? " · " + esc(ort) : ""}</p>
-        ${lan.start ? `<p class="countdown"></p>` : ""}
+  <section class="hero"><div class="wrap hero-innen">
+    <div>
+      <span class="ueberzeile">${esc(e.seite.slogan)}</span>
+      <h1>${esc(lan.name)}</h1>
+      <div class="chips">
+        <span class="chip">📅 ${esc(zeitraum(lan.start, lan.ende))}</span>
+        ${lan.ort ? `<span class="chip">📍 ${esc(lan.ort)}</span>` : ""}
+        <span class="chip">🖥️ ${z.sitzplaetze} Plätze</span>
       </div>
-      <div class="zeile"><a class="knopf primaer gross" href="#/tickets">Tickets</a><a class="knopf gross" href="#/sitzplan">Sitzplan</a></div>
+      ${lan.start ? `<div class="countdown"></div>` : ""}
+      <div class="zeile" style="margin-bottom:26px">
+        <a class="knopf primaer gross" href="#/tickets">Ticket sichern</a>
+        <a class="knopf gross" href="#/sitzplan">Sitzplan ansehen</a>
+      </div>
+      ${belegungHtml(z)}
     </div>
-    ${belegungHtml(z)}
-  </div></section>
-
-  <section class="abschnitt"><div class="wrap lan-kurz">
-    <figure><img src="img/halle.jpg" alt="Die Nordhessenhalle in Volkmarsen vor dem Aufbau" loading="lazy"><figcaption>Die Nordhessenhalle – noch leer. Ein paar Tage später stehen hier ${z.sitzplaetze} PCs.</figcaption></figure>
-    <div><h2>Die LAN</h2>${lan.beschreibung ? `<p class="news-text">${esc(lan.beschreibung)}</p>` : ""}${eckdatenListe(e)}
-      <p><a href="#/lan">Anfahrt, Hallenplan und alle Infos</a></p></div>
+    <div class="hero-wappen"><div class="ring"></div><img src="img/wappen.jpg" alt="AGE-LAN Wappen"></div>
   </div></section>
 
   <section class="abschnitt"><div class="wrap">
-    <div class="abschnitt-kopf"><h2>Tickets</h2><a href="#/tickets">Bezahlung und Ablauf</a></div>
+    <div class="abschnitt-kopf"><div><span class="ueberzeile">Was dich erwartet</span><h2>Vier Tage Age of Empires</h2></div></div>
+    <div class="raster raster-3">${e.highlights.map((h) => `<div class="karte highlight">${h.icon ? `<div class="ico">${esc(h.icon)}</div>` : ""}<div><h3>${esc(h.titel)}</h3><p>${esc(h.text)}</p></div></div>`).join("")}</div>
+  </div></section>
+
+  <section class="abschnitt"><div class="wrap">
+    <div class="abschnitt-kopf"><div><span class="ueberzeile">Tickets</span><h2>Sei dabei</h2></div><a href="#/tickets">Alle Infos zu Tickets →</a></div>
     <div class="raster raster-3">${d.tickettypen.filter((t) => t.kaufbar).map(ticketKarte).join("") || `<div class="leer">Noch keine Tickets im Verkauf.</div>`}</div>
   </div></section>
 
-  ${d.news.length ? `<section class="abschnitt"><div class="wrap schmal">
-    <div class="abschnitt-kopf"><h2>News</h2><a href="#/lan">Alle Meldungen</a></div>
-    <div class="news-liste">${d.news.slice(0, 5).map(newsZeile).join("")}</div>
+  ${d.news.length ? `<section class="abschnitt"><div class="wrap">
+    <div class="abschnitt-kopf"><div><span class="ueberzeile">Neuigkeiten</span><h2>Aus dem Lager</h2></div><a href="#/lan">Alle News →</a></div>
+    <div class="raster raster-3">${d.news.slice(0, 3).map(newsKarte).join("")}</div>
   </div></section>` : ""}
 
   ${e.sponsoren.length ? `<section class="abschnitt"><div class="wrap">
-    <h2>Sponsoren</h2>
-    <div class="sponsoren">${e.sponsoren.map((s) => `<a class="sponsor" ${sichereUrl(s.url) ? `href="${esc(sichereUrl(s.url))}" target="_blank" rel="noopener"` : ""}>${s.logo ? `<img src="${esc(s.logo)}" alt="">` : ""}${esc(s.name)}</a>`).join("")}</div>
+    <div class="abschnitt-kopf"><div><span class="ueberzeile">Danke an</span><h2>Unsere Sponsoren</h2></div></div>
+    <div class="sponsoren">${e.sponsoren.map((sp) => `<a class="sponsor" ${sichereUrl(sp.url) ? `href="${esc(sichereUrl(sp.url))}" target="_blank" rel="noopener"` : ""}>${sichereUrl(sp.logo) ? `<img src="${esc(sichereUrl(sp.logo))}" alt="">` : ""}${esc(sp.name)}</a>`).join("")}</div>
   </div></section>` : ""}
 
-  ${e.seite.socials && sichereUrl(e.seite.socials.discord) ? `<section class="abschnitt"><div class="wrap"><p class="discord-zeile">Fragen, Mitfahrgelegenheit, Teams? Das läuft alles auf unserem <a href="${esc(sichereUrl(e.seite.socials.discord))}" target="_blank" rel="noopener">Discord</a>.</p></div></section>` : ""}`;
+  ${discord ? `<section class="abschnitt"><div class="wrap"><div class="karte glanz zeile zwischen" style="padding:28px">
+    <div><h2 style="margin:0">Komm auf unseren Discord</h2><p class="leise" style="margin:6px 0 0">Mitspieler finden, Gruppen bilden, Turniere besprechen.</p></div>
+    <a class="knopf primaer gross" href="${esc(discord)}" target="_blank" rel="noopener">Discord beitreten</a></div></div></section>` : ""}`;
   ticketKnoepfeVerdrahten(main);
   kopierenVerdrahten(main);
   if (lan.start) countdownStarten(main, lan.start);
@@ -333,7 +346,7 @@ async function seiteFaq(main) {
 
 // Packliste: fest im Code, Haken merkt sich nur der eigene Browser.
 const PACKLISTE = [
-  ["Rechner & Zubehör", [
+  ["🖥️ Rechner & Zubehör", [
     ["pc", "PC oder Laptop"],
     ["netzteil", "Stromkabel für PC und Monitor (bzw. Laptop-Netzteil)"],
     ["monitor", "Monitor mit passendem Kabel (HDMI / DisplayPort)"],
@@ -343,12 +356,12 @@ const PACKLISTE = [
     ["lankabel", "Netzwerkkabel, am besten 5 m oder länger"],
     ["steckdose", "Mehrfachsteckdose"],
   ]],
-  ["Vorher zu Hause erledigen", [
+  ["🏠 Vorher zu Hause erledigen", [
     ["update", "Age of Empires 2 und Windows auf den neuesten Stand bringen"],
     ["login", "Zugangsdaten für Steam bzw. Microsoft-Konto parat haben"],
     ["treiber", "Grafiktreiber aktualisieren"],
   ]],
-  ["Persönliches", [
+  ["🎒 Persönliches", [
     ["ticket", "Ticket (QR-Code auf dem Handy oder ausgedruckt)"],
     ["ausweis", "Personalausweis"],
     ["muttizettel", "Unter 18: unterschriebener Muttizettel und Aufsichtsperson"],
@@ -356,7 +369,7 @@ const PACKLISTE = [
     ["handy", "Handy mit Ladekabel"],
     ["kleidung", "Bequeme Kleidung und Wechselsachen"],
   ]],
-  ["Übernachtung", [
+  ["😴 Übernachtung", [
     ["schlafsack", "Schlafsack oder Decke und Kissen"],
     ["isomatte", "Isomatte oder Luftmatratze"],
     ["handtuch", "Handtuch und Duschzeug"],
@@ -502,7 +515,7 @@ async function seiteApp(main, bereich) {
   // Navigation; die Reiterleiste der App ist eingebettet ausgeblendet.
   // &t= erzwingt die aktuelle Fassung der App (GitHub Pages cacht sonst 10 Min).
   main.innerHTML = `<div class="app-rahmen">
-    <div class="app-kopf"><div class="wrap lz-kacheln">${APP_KACHELN.map(([b, titel, text]) => `<a class="app-kachel ${b === bereich ? "aktiv" : ""}" href="#/app/${b}"><b>${titel}</b><small>${text}</small></a>`).join("")}</div></div>
+    <div class="app-kopf"><div class="wrap lz-kacheln">${APP_KACHELN.map(([b, titel, text, ico]) => `<a class="app-kachel ${b === bereich ? "aktiv" : ""}" href="#/app/${b}"><b>${ico} ${titel}</b><small>${text}</small></a>`).join("")}</div></div>
     <iframe id="app-frame" title="AgeLan-App" src="${AGELAN_APP}?eingebettet=1&bereich=${bereich}&t=${Date.now()}"></iframe></div>`;
 }
 
