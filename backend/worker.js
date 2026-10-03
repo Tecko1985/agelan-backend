@@ -1765,6 +1765,32 @@ const AKTIONEN = {
     return { ok: true, neuesPasswort };
   },
 
+  // Konto endgültig löschen – nur ohne gültiges Ticket. Stornierte Tickets, Gruppen-Mitgliedschaft
+  // und Übergabe-Anfragen gehen mit; Protokolleinträge bleiben (ohne Bezug zum Konto).
+  async adminBenutzerLoeschen(c) {
+    const { env, body } = c;
+    const ich = brauchtAdmin(c);
+    const u = await eins(env, "SELECT * FROM users WHERE id = ?", Number(body.userId));
+    if (!u) throw new F(404, "Konto nicht gefunden.");
+    if (u.id === ich.id) throw new F(400, "Du kannst dein eigenes Konto nicht löschen.");
+    if (u.rolle === "admin") throw new F(409, "Veranstalter-Konten lassen sich nicht löschen – erst die Rolle ändern.");
+    const tickets = await alle(env, `SELECT t.status, t.paypal_capture, l.name AS lan FROM tickets t JOIN lans l ON l.id = t.lan_id WHERE t.user_id = ?`, u.id);
+    const gueltig = tickets.filter((t) => t.status !== "storniert");
+    if (gueltig.length) throw new F(409, `${u.nick} hat noch ein Ticket (${[...new Set(gueltig.map((t) => t.lan))].join(", ")}). Erst das Ticket stornieren, dann löschen.`);
+    if (tickets.some((t) => t.paypal_capture)) throw new F(409, `Zu einem stornierten Ticket von ${u.nick} gibt es eine PayPal-Zahlung. Das Konto bleibt deshalb als Beleg erhalten – sperre es stattdessen.`);
+    for (const g of await alle(env, "SELECT g.* FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE gm.user_id = ?", u.id)) await mitgliedEntfernen(env, g, u.id);
+    await env.DB.batch([
+      st(env, "DELETE FROM group_members WHERE user_id = ?", u.id),
+      st(env, "DELETE FROM uebergaben WHERE von_id = ? OR an_id = ?", u.id, u.id),
+      st(env, "UPDATE netz_logins SET ticket_id = NULL WHERE ticket_id IN (SELECT id FROM tickets WHERE user_id = ?)", u.id),
+      st(env, "DELETE FROM tickets WHERE user_id = ?", u.id),
+      st(env, "UPDATE log SET user_id = NULL WHERE user_id = ?", u.id),
+      st(env, "DELETE FROM users WHERE id = ?", u.id),
+    ]);
+    await protokoll(c, "benutzer-geloescht", { nutzer: u.nick, email: u.email });
+    return { ok: true };
+  },
+
   // ---------- Hallen-Portal ----------
   // Aufruf vom Portal-Server (PHP) – ohne Konto, mit PORTAL_SECRET.
   async portalAnmeldung(c) {

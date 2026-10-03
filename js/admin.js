@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=60";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=60";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=60";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=60";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=60";
+import { api, istDemo } from "./api.js?v=61";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=61";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=61";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=61";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=61";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=60");
+    const { ticketHtml } = await import("./konto.js?v=61");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=60");
+  planModul = await import("./planeditor.js?v=61");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=60");
+    const { ticketHtml } = await import("./konto.js?v=61");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -1013,7 +1013,7 @@ async function benutzer(box) {
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
       <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["orga", "Orga"], ["admin", "Veranstalter"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       <td><input type="checkbox" data-streamer="${u.id}" ${u.streamer ? "checked" : ""}></td>
-      <td style="white-space:nowrap"><button class="knopf klein" data-pw="${u.id}">Passwort neu</button> <button class="knopf klein geist" data-sperren="${u.id}">${u.gesperrt ? "Entsperren" : "Sperren"}</button></td></tr>`).join("");
+      <td style="white-space:nowrap"><button class="knopf klein" data-pw="${u.id}">Passwort neu</button> <button class="knopf klein geist" data-sperren="${u.id}">${u.gesperrt ? "Entsperren" : "Sperren"}</button>${u.rolle !== "admin" ? ` <button class="knopf klein rot" data-loeschen="${u.id}">Löschen</button>` : ""}</td></tr>`).join("");
     $$("[data-rolle]", box).forEach((s) => (s.onchange = async () => {
       try { await api("adminBenutzerAendern", { userId: Number(s.dataset.rolle), rolle: s.value }); bs.find((u) => u.id === Number(s.dataset.rolle)).rolle = s.value; toast("Rolle geändert.", "ok"); } catch (e) { fehler(e); zeichnen(); }
     }));
@@ -1033,6 +1033,13 @@ async function benutzer(box) {
       await api("adminBenutzerAendern", { userId: u.id, gesperrt: !u.gesperrt });
       u.gesperrt = !u.gesperrt; zeichnen();
     })));
+    $$("[data-loeschen]", box).forEach((b) => (b.onclick = async () => {
+      const u = bs.find((x) => x.id === Number(b.dataset.loeschen));
+      if (!(await bestaetigen(`Konto ${u.nick} (${u.vorname} ${u.nachname}) endgültig löschen? Das lässt sich nicht rückgängig machen.`, { ja: "Löschen", gefahr: true }))) return;
+      mitSperre(b, async () => {
+        try { await api("adminBenutzerLoeschen", { userId: u.id }); bs.splice(bs.indexOf(u), 1); toast(u.nick + " gelöscht.", "ok"); zeichnen(); } catch (e) { fehler(e); }
+      });
+    }));
     $$("[data-ticket]", box).forEach((b) => (b.onclick = () => mitSperre(b, async () => {
       const u = bs.find((x) => x.id === Number(b.dataset.ticket));
       const { tickettypen: ts } = await api("adminTickettypen", { lanId });
