@@ -128,7 +128,7 @@ const MIGRATIONEN = [
   "ALTER TABLE lans ADD COLUMN stufe_auto INTEGER NOT NULL DEFAULT 1",  // nächste Stufe automatisch, wenn die aktive ausverkauft ist
   "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
-  "UPDATE users SET rolle = 'user' WHERE rolle = 'orga'",                // nur noch Gast und Orga (= admin)
+  "UPDATE users SET rolle = 'admin' WHERE rolle = 'orga'",               // nur noch Gast und Orga (= admin): alte Orga wird volle Orga
   "ALTER TABLE tickets ADD COLUMN paypal_order TEXT NOT NULL DEFAULT ''",   // PayPal-Bestellung (Checkout) zum Ticket
   "ALTER TABLE tickets ADD COLUMN paypal_capture TEXT NOT NULL DEFAULT ''", // PayPal-Transaktions-ID nach erfolgreicher Zahlung
 ];
@@ -1751,6 +1751,7 @@ const AKTIONEN = {
     const ich = brauchtAdmin(c);
     const u = await eins(env, "SELECT * FROM users WHERE id = ?", Number(body.userId));
     if (!u) throw new F(404, "Konto nicht gefunden.");
+    if (body.rolle === "orga") body.rolle = "admin"; // „Orga“ heißt immer volle Orga
     if (body.rolle) {
       if (!ROLLEN.includes(body.rolle)) throw new F(400, "Unbekannte Rolle.");
       if (u.id === ich.id && body.rolle !== "admin") throw new F(400, "Du kannst dir die Orga-Rolle nicht selbst nehmen.");
