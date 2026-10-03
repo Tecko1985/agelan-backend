@@ -1,9 +1,9 @@
 // Verwaltung für die Orga (Rolle admin).
-import { api, istDemo } from "./api.js?v=66";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=66";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=66";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=66";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=66";
+import { api, istDemo } from "./api.js?v=67";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=67";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=67";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=67";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=67";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -106,7 +106,7 @@ async function uebersicht(box) {
 function statusAbzeichen(t) {
   if (t.status === "storniert") return `<span class="abzeichen rot">storniert</span>`;
   if (t.checkinAt) return `<span class="abzeichen gruen">✓ eingecheckt</span>`;
-  return t.status === "bezahlt" ? `<span class="abzeichen gruen">bezahlt</span>` : `<span class="abzeichen gold">offen</span>`;
+  return t.status === "bezahlt" ? `<span class="abzeichen gruen">bezahlt</span>` : `<span class="abzeichen gold">offen</span>${t.ueberfaellig ? ` <span class="abzeichen rot" title="Zahlungsfrist abgelaufen">überfällig</span>` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=66");
+    const { ticketHtml } = await import("./konto.js?v=67");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=66");
+  planModul = await import("./planeditor.js?v=67");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=66");
+    const { ticketHtml } = await import("./konto.js?v=67");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -950,7 +950,9 @@ async function einstellungen(box) {
         <span class="klein ${pp.bereit ? "gruen" : "rot"}" style="display:block">${pp.bereit ? "Eingerichtet (" + (pp.modus === "live" ? "LIVE – echtes Geld" : "Sandbox – Testgeld") + ")" : "Noch nicht eingerichtet: Secrets PAYPAL_CLIENT_ID und PAYPAL_SECRET beim Worker fehlen"}</span></span></label>
       <div class="zeile"><label class="check"><input type="checkbox" name="a_ueberweisung" ${z.arten.ueberweisung ? "checked" : ""}> Überweisung</label><label class="check"><input type="checkbox" name="a_bar" ${z.arten.bar ? "checked" : ""}> Bar</label></div>
       <div class="zwei"><label class="feld"><span>Kontoinhaber</span><input name="kontoinhaber" value="${esc(z.kontoinhaber)}"></label><label class="feld"><span>IBAN</span><input name="iban" value="${esc(z.iban)}"></label></div>
-      <div class="zwei"><label class="feld"><span>Bank</span><input name="bank" value="${esc(z.bank)}"></label><label class="feld"><span>Zahlungsfrist (Tage)</span><input name="fristTage" type="number" min="0" value="${z.fristTage}"></label></div>
+      <div class="zwei"><label class="feld"><span>Bank</span><input name="bank" value="${esc(z.bank)}"></label><label class="feld"><span>Zahlungsfrist (Tage, 0 = keine)</span><input name="fristTage" type="number" min="0" value="${z.fristTage}"></label></div>
+      <label class="check"><input type="checkbox" name="autoStorno" ${z.autoStorno ? "checked" : ""}> <span>Nach Ablauf der Zahlungsfrist <b>automatisch stornieren</b>, damit keine Plätze blockiert bleiben
+        <span class="klein leise" style="display:block">Gilt für Überweisung und PayPal. Bar ist ausgenommen, Freitickets und laufende PayPal-Zahlungen auch. Wird stündlich geprüft; der Gast sieht die Frist im Konto.</span></span></label>
       <label class="feld"><span>Hinweis für Gäste</span><textarea name="hinweis">${esc(z.hinweis)}</textarea></label>
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="netz"><h3>Internet-Zugang</h3>
@@ -981,7 +983,7 @@ async function einstellungen(box) {
 
   const sammeln = {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
-    zahlung: (v) => [["zahlung", { arten: { paypal_direkt: v.a_paypal_direkt, paypal: false, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: z.paypal, paypalMe: z.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
+    zahlung: (v) => [["zahlung", { arten: { paypal_direkt: v.a_paypal_direkt, paypal: false, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: z.paypal, paypalMe: z.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, autoStorno: !!v.autoStorno, hinweis: v.hinweis }]],
     netz: (v) => [["netz", { ssid: "", wlanPasswort: "", portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
     optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],

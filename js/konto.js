@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=66";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=66";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=66";
+import { api, tokenSetzen } from "./api.js?v=67";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=67";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=67";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -280,11 +280,12 @@ function zahlInfo(t, za, kurz) {
     wie = `<p>Du zahlst <b>${euro(t.preisCent)}</b> bar bei der Orga oder an der Abendkasse. Danach suchst du dir deinen Platz aus.</p>`;
   }
   const frist = za.fristTage ? new Date(t.createdAt + za.fristTage * 864e5).toLocaleDateString("de-DE") : "";
+  const verfall = za.autoStorno && t.zahlart !== "bar" ? " <b>Danach wird die Bestellung automatisch storniert</b> und der Platz wieder frei." : "";
   return `<div class="karte" style="margin-top:12px;background:rgba(232,182,76,.06);border-color:var(--rand2)">
     <div class="zeile zwischen" style="margin-bottom:10px"><b>So bezahlst du</b>
       <select data-zahlart style="width:auto">${arten.map(([k, l]) => `<option value="${k}" ${k === t.zahlart ? "selected" : ""}>${l}</option>`).join("")}</select></div>
     ${wie}
-    ${t.zahlart === "paypal_direkt" ? (frist ? `<p class="klein leise" style="margin:10px 0 0">Bitte bezahle bis ${frist}.</p>` : "") : `<p class="klein leise" style="margin:10px 0 0">${esc(za.hinweis)}${frist && t.zahlart !== "bar" ? " Bitte bezahle bis " + frist + "." : ""}</p>`}</div>`;
+    ${t.zahlart === "paypal_direkt" ? (frist ? `<p class="klein leise" style="margin:10px 0 0">Bitte bezahle bis ${frist}.${verfall}</p>` : "") : `<p class="klein leise" style="margin:10px 0 0">${esc(za.hinweis)}${frist && t.zahlart !== "bar" ? " Bitte bezahle bis " + frist + "." + verfall : ""}</p>`}</div>`;
 }
 
 function datenDialog(u, main) {

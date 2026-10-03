@@ -154,6 +154,7 @@ const STANDARD = {
     paypal: "", paypalMe: "", iban: "", kontoinhaber: "", bank: "",
     hinweis: "Bitte gib bei Überweisung deinen Nickname und die ersten 8 Zeichen deines Ticket-Codes als Verwendungszweck an.",
     fristTage: 14,
+    autoStorno: false, // offene Tickets (außer Bar) nach Ablauf der Frist automatisch stornieren
   },
   faq: [
     { f: "Wie läuft das mit dem Essen?", a: "Vor Ort gibt es Catering zu fairen Preisen. Bestellt wird bequem über die AgeLan-App, für die dein Konto beim Check-in freigeschaltet wird." },
@@ -199,6 +200,10 @@ export default {
       if (!env.DB) throw new F(500, "Datenbank-Binding DB fehlt.");
       if (!env.TOKEN_SECRET) throw new F(500, "Secret TOKEN_SECRET fehlt.");
       await bereitmachen(env);
+      if (Date.now() - fristenGeprueft > 30 * 60e3 && ctx && ctx.waitUntil) {
+        fristenGeprueft = Date.now();
+        ctx.waitUntil(fristenDurchsetzen(env).catch((e) => console.error("Fristen", e)));
+      }
       const fn = AKTIONEN[body.aktion];
       if (!fn) throw new F(400, "Unbekannte Aktion");
       const c = { env, request, body, ip: request.headers.get("CF-Connecting-IP") || "?" };
@@ -211,7 +216,39 @@ export default {
       return json({ error: "Interner Fehler" }, 500, cors);
     }
   },
+
+  // Cron (stündlich, im Dashboard unter Triggers): Zahlungsfristen durchsetzen.
+  async scheduled(event, env, ctx) {
+    if (!env.DB) return;
+    await bereitmachen(env);
+    fristenGeprueft = Date.now();
+    await fristenDurchsetzen(env);
+  },
 };
+
+// Zahlungsfrist: Offene Tickets, deren Frist abgelaufen ist, werden storniert – sofern in den
+// Einstellungen eingeschaltet. Bar ist ausgenommen (wird vor Ort bezahlt), ebenso Tickets mit
+// laufender PayPal-Zahlung und Freitickets.
+let fristenGeprueft = 0;
+async function fristenDurchsetzen(env) {
+  const z = (await einstellungen(env)).zahlung;
+  const tage = Number(z.fristTage) || 0;
+  if (!z.autoStorno || tage <= 0) return 0;
+  const faellig = await alle(env, `SELECT t.id, t.user_id, t.lan_id, u.nick FROM tickets t JOIN users u ON u.id = t.user_id
+    WHERE t.status = 'offen' AND t.zahlart != 'bar' AND t.paypal_capture = '' AND t.preis_cent > 0 AND t.created_at < ?`, Date.now() - tage * 864e5);
+  if (!faellig.length) return 0;
+  const jetzt = Date.now();
+  const notiz = "Automatisch storniert: Zahlungsfrist abgelaufen (" + new Date(jetzt).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" }) + ")";
+  const stmts = [];
+  for (const t of faellig) {
+    stmts.push(st(env, `UPDATE tickets SET status = 'storniert', seat_id = NULL, orga_notiz = TRIM(COALESCE(orga_notiz, '') || char(10) || ?, char(10) || ' ')
+      WHERE id = ? AND status = 'offen' AND paypal_capture = ''`, notiz, t.id));
+    stmts.push(st(env, "DELETE FROM uebergaben WHERE lan_id = ? AND von_id = ?", t.lan_id, t.user_id));
+    stmts.push(st(env, "INSERT INTO log (at, user_id, aktion, details) VALUES (?,?,?,?)", jetzt, null, "auto-storno", JSON.stringify({ ticket: t.id, nick: t.nick, fristTage: tage })));
+  }
+  await env.DB.batch(stmts);
+  return faellig.length;
+}
 
 class F extends Error {
   constructor(status, msg) { super(msg); this.status = status; }
@@ -1231,8 +1268,18 @@ const AKTIONEN = {
   async adminTickets(c) {
     brauchtOrga(c);
     const lan = await lanAusBody(c);
-    const [zeilen, ...z] = await lesen(c.env, [TICKET_SQL + " WHERE t.lan_id = ? ORDER BY t.created_at DESC", lan.id], ...zahlenAbfragen(lan.id));
-    return { lan: lanAus(lan), zahlen: zahlenAus(lan, z), tickets: zeilen.map(ticketAus) };
+    const [zeilen, einstZeilen, ...z] = await lesen(c.env, [TICKET_SQL + " WHERE t.lan_id = ? ORDER BY t.created_at DESC", lan.id], [EINSTELLUNGEN_SQL], ...zahlenAbfragen(lan.id));
+    const za = einstellungenAus(einstZeilen).zahlung;
+    const grenze = za.fristTage > 0 ? Date.now() - za.fristTage * 864e5 : 0;
+    const tickets = zeilen.map((t) => ({ ...ticketAus(t), ueberfaellig: !!grenze && t.status === "offen" && t.zahlart !== "bar" && !t.paypal_capture && t.preis_cent > 0 && t.created_at < grenze }));
+    return { lan: lanAus(lan), zahlen: zahlenAus(lan, z), tickets, autoStorno: !!za.autoStorno };
+  },
+
+  async adminFristenPruefen(c) {
+    brauchtAdmin(c);
+    const n = await fristenDurchsetzen(c.env);
+    if (n) await protokoll(c, "auto-storno-manuell", { anzahl: n });
+    return { storniert: n };
   },
 
   async adminBezahlt(c) {
