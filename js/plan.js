@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=37";
+import { esc } from "./ui.js?v=38";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
@@ -20,12 +20,23 @@ export function sitzSvg(s, klassen = "") {
     <text x="${g / 2}" y="${g / 2 + 3}" text-anchor="middle">${esc(s.label)}</text></g>`;
 }
 
+// Fläche, die wirklich gebraucht wird: nie kleiner als alle Plätze und Flächen –
+// sonst werden Plätze unten/rechts abgeschnitten, wenn die eingestellte Größe zu klein ist.
+export function planGroesse(plan, sitze) {
+  const deko = plan.deko || [];
+  return {
+    breite: Math.ceil(Math.max(plan.breite || 0, ...sitze.map((s) => s.x + 1), ...deko.map((d) => d.x + d.w))),
+    hoehe: Math.ceil(Math.max(plan.hoehe || 0, ...sitze.map((s) => s.y + 1), ...deko.map((d) => d.y + d.h))),
+  };
+}
+
 export function planSvg(plan, sitze, { zoom = 1, raster = false, klassen = () => "", extra = "", svgKlasse = "" } = {}) {
-  const w = plan.breite * U, h = plan.hoehe * U;
+  const g = planGroesse(plan, sitze);
+  const w = g.breite * U, h = g.hoehe * U;
   let linien = "";
   if (raster) {
-    for (let i = 0; i <= plan.breite; i++) linien += `<line x1="${i * U}" y1="0" x2="${i * U}" y2="${h}"/>`;
-    for (let i = 0; i <= plan.hoehe; i++) linien += `<line x1="0" y1="${i * U}" x2="${w}" y2="${i * U}"/>`;
+    for (let i = 0; i <= g.breite; i++) linien += `<line x1="${i * U}" y1="0" x2="${i * U}" y2="${h}"/>`;
+    for (let i = 0; i <= g.hoehe; i++) linien += `<line x1="0" y1="${i * U}" x2="${w}" y2="${i * U}"/>`;
   }
   return `<svg class="${svgKlasse}" xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 ${w + 12} ${h + 12}" width="${(w + 12) * zoom}" height="${(h + 12) * zoom}">
     <rect x="-6" y="-6" width="${w + 12}" height="${h + 12}" fill="transparent"></rect>

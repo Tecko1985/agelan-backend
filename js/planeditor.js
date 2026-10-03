@@ -1,9 +1,9 @@
 // Sitzplan-Editor: Plätze setzen, Blöcke einfügen, verschieben, umbenennen,
 // sperren, Flächen/Texte/Wände zeichnen. Gespeichert wird der ganze Plan.
-import { api } from "./api.js?v=37";
-import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=37";
-import { planSvg, U } from "./plan.js?v=37";
-import { beimVerlassen, vorVerlassen } from "./app.js?v=37";
+import { api } from "./api.js?v=38";
+import { esc, $, $$, toast, fehler, modal, bestaetigen, mitSperre, formDaten } from "./ui.js?v=38";
+import { planSvg, planGroesse, U } from "./plan.js?v=38";
+import { beimVerlassen, vorVerlassen } from "./app.js?v=38";
 
 const WERKZEUGE = [
   ["auswahl", "↖ Auswählen", "Klicken/Ziehen wählt aus, gewählte Elemente ziehen verschiebt sie"],
@@ -39,6 +39,13 @@ export async function editor(container, lanId) {
     sitze: daten.sitze.map((s) => ({ id: s.id, label: s.label, x: s.x, y: s.y, gesperrt: s.gesperrt != null ? s.gesperrt : s.status === "gesperrt", belegt: s.status === "belegt" || s.status === "reserviert", nick: s.nick })),
     auswahl: new Set(), werkzeug: "auswahl", zoom: 1, verlauf: [], geaendert: false,
   };
+  // Liegen Plätze/Flächen außerhalb der eingestellten Größe, Fläche passend vergrößern (+1 Rand),
+  // damit alles sichtbar und erreichbar ist.
+  {
+    const g = planGroesse(st.plan, st.sitze);
+    if (g.breite > st.plan.breite) st.plan.breite = g.breite + 1;
+    if (g.hoehe > st.plan.hoehe) st.plan.hoehe = g.hoehe + 1;
+  }
   const ac = new AbortController();
   const ich = {
     st, container,
