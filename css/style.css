@@ -497,8 +497,15 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .fuss-innen { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .fuss a { color: var(--leise); }
 .fuss a:hover { color: var(--gold); }
-.socials { display: flex; gap: 8px; }
-.socials a { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--rand); background: var(--karte); font-size: 0.8rem; font-weight: 700; }
+.socials { display: flex; gap: 10px; flex-wrap: wrap; }
+.socials a { --farbe: var(--text); width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--rand); background: var(--karte); transition: 0.15s; }
+.socials a i { width: 22px; height: 22px; background: var(--farbe); -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
+.socials a:hover { border-color: var(--farbe); background: color-mix(in srgb, var(--farbe) 14%, transparent); }
+.socials .sm-discord { --farbe: #5865f2; }
+.socials .sm-twitch { --farbe: #9146ff; }
+.socials .sm-youtube { --farbe: #ff0033; }
+.socials .sm-instagram { --farbe: #e4405f; }
+.socials .sm-facebook { --farbe: #1877f2; }
 .sponsoren { display: flex; flex-wrap: wrap; gap: 14px; }
 .sponsor { padding: 16px 22px; border: 1px solid var(--rand); border-radius: 12px; background: var(--karte); font: 600 1.05rem var(--sans); color: var(--text); display: flex; align-items: center; gap: 10px; }
 .sponsor img { max-height: 36px; }

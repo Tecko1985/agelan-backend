@@ -1,5 +1,5 @@
-import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=28";
-import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=28";
+import { api, token, tokenSetzen, istDemo, appAnmeldungEntfernen, APP_KONTO_KEY, APP_TAB_KEY, datenStand } from "./api.js?v=29";
+import { esc, el, $, $$, euro, zeitraum, newsDatum, datum, fehler, toast, AGELAN_APP, kopierenVerdrahten, sichereUrl } from "./ui.js?v=29";
 
 export const zustand = { daten: null, ich: null };
 
@@ -59,7 +59,7 @@ function rahmenZeichnen() {
   if (s.headerInfo) baender.push(`<div class="info-band">${esc(s.headerInfo)}</div>`);
   $("#baender").innerHTML = baender.join("");
   const reset = $("#demo-reset");
-  if (reset) reset.onclick = async () => (await import("./demo.js?v=28")).demoZuruecksetzen();
+  if (reset) reset.onclick = async () => (await import("./demo.js?v=29")).demoZuruecksetzen();
 
   $$(".nur-orga").forEach((a) => a.classList.toggle("versteckt", !istOrga()));
   const rechts = $("#kopf-rechts");
@@ -73,8 +73,9 @@ function rahmenZeichnen() {
   }
 
   const so = s.socials || {};
-  const socials = [["discord", "DC"], ["twitch", "TW"], ["youtube", "YT"], ["instagram", "IG"], ["facebook", "FB"]]
-    .filter(([k]) => sichereUrl(so[k])).map(([k, kurz]) => `<a href="${esc(sichereUrl(so[k]))}" target="_blank" rel="noopener" title="${k}">${kurz}</a>`).join("");
+  // Logos: Simple Icons (CC0), lokal unter img/social/ – keine fremden Server beim Seitenaufruf.
+  const socials = [["discord", "Discord"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["instagram", "Instagram"], ["facebook", "Facebook"]]
+    .filter(([k]) => sichereUrl(so[k])).map(([k, name]) => `<a class="sm-${k}" href="${esc(sichereUrl(so[k]))}" target="_blank" rel="noopener" title="AGE-LAN auf ${name}" aria-label="${name}"><i style="--ico:url('${new URL("img/social/" + k + ".svg", document.baseURI).href}')"></i></a>`).join("");
   $("#fuss").innerHTML = `
     <div><img src="img/logo.webp" alt="AGE LAN" width="64" height="64" style="margin-bottom:8px">
       <div>${esc(s.slogan)}</div><div class="klein leiser" style="margin-top:6px">© ${new Date().getFullYear()} AGE-LAN · Private Veranstaltung</div></div>
@@ -95,11 +96,11 @@ const SEITEN = {
   tickets: seiteTickets,
   seite: seiteText,
   app: seiteApp,
-  sitzplan: async (m, p) => (await import("./sitzplan.js?v=28")).render(m, p),
-  konto: async (m, p) => (await import("./konto.js?v=28")).render(m, p),
-  t: async (m, p) => (await import("./konto.js?v=28")).renderTicketSeite(m, p),
-  checkin: async (m, p) => (await import("./checkin.js?v=28")).render(m, p),
-  admin: async (m, p) => (await import("./admin.js?v=28")).render(m, p),
+  sitzplan: async (m, p) => (await import("./sitzplan.js?v=29")).render(m, p),
+  konto: async (m, p) => (await import("./konto.js?v=29")).render(m, p),
+  t: async (m, p) => (await import("./konto.js?v=29")).renderTicketSeite(m, p),
+  checkin: async (m, p) => (await import("./checkin.js?v=29")).render(m, p),
+  admin: async (m, p) => (await import("./admin.js?v=29")).render(m, p),
 };
 
 // Aufräumen beim Seitenwechsel (Intervalle, Kamera, Listener). el ist ein Element
@@ -185,7 +186,7 @@ function ticketKarte(t) {
 
 function ticketKnoepfeVerdrahten(root) {
   $$("[data-kaufen]", root).forEach((b) => (b.onclick = async () => {
-    const konto = await import("./konto.js?v=28");
+    const konto = await import("./konto.js?v=29");
     konto.kaufen(Number(b.dataset.kaufen));
   }));
 }
@@ -322,9 +323,9 @@ async function seiteLan(main) {
         ${maps ? `<a class="knopf klein" href="${maps}" target="_blank" rel="noopener">In Google Maps öffnen</a>` : ""}</div>
       <div class="karte anfahrt"><h3>Anfahrt</h3>
         ${e.texte.anfahrt ? `<div class="anfahrt-text">${textAlsHtml(e.texte.anfahrt)}</div>` : `<p class="leise">Infos zur Anfahrt folgen.</p>`}
-        <div class="zeile" style="margin-top:14px">${maps ? `<a class="knopf klein" href="${maps}" target="_blank" rel="noopener">Route planen</a>` : ""}<a class="knopf klein geist" href="#/packliste">Packliste: Was mitbringen?</a></div></div>
+        <div class="zeile" style="margin-top:14px">${maps ? `<a class="knopf klein" href="${maps}" target="_blank" rel="noopener">Route planen</a>` : ""}</div></div>
     </div>
-    <div class="karte" style="margin-top:18px"><h3>Hallenplan</h3><img class="hallenplan" src="img/hallenplan.png" alt="Hallenplan der Nordhessenhalle mit Schlafsälen, Food-Point, Check-in und den Tischreihen A bis H" loading="lazy"></div>
+    <div class="karte" style="margin-top:18px"><h3>Hallenplan</h3><img class="hallenplan" src="img/hallenplan.png" alt="Hallenplan der Nordhessenhalle mit Schlafsaal, Food-Point, Check-in und den Tischreihen A bis H" loading="lazy"></div>
     <div class="abschnitt-kopf" style="margin-top:40px"><h2>News</h2></div>
     <div class="news-liste schmal">${d.news.map(newsZeile).join("") || `<div class="leer">Noch keine News.</div>`}</div>
   </div>`;

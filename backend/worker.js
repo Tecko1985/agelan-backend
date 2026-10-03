@@ -261,7 +261,7 @@ async function grundausstattung(env) {
   const r = await los(env,
     "INSERT INTO lans (name, start, ende, gaeste_limit, verkauf_offen, ort, adresse, beschreibung, aktiv, created_at) VALUES (?,?,?,?,?,?,?,?,1,?)",
     "AGE-LAN #4", "", "", 120, 1, "Nordhessenhalle Volkmarsen", "Schulstraße 11, 34471 Volkmarsen",
-    "Vier Tage Age of Empires 2 mit Turnieren, Showmatches und jeder Menge Community.", jetzt);
+    "Vier Tage Age of Empires 2 mit der geilsten Community.", jetzt);
   const lanId = r.meta.last_row_id;
   const voll = ["Sitzplatz an Doppeltischen", "Internetzugang", "Garantierter Einlass nach Zahlung", "Schlafbereich, Duschen und Gaming-Area"];
   const typen = [
