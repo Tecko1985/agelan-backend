@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=58";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=58";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=58";
+import { api, tokenSetzen } from "./api.js?v=59";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=59";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=59";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
