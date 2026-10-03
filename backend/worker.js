@@ -129,6 +129,7 @@ const MIGRATIONEN = [
   "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
   "UPDATE users SET rolle = 'admin' WHERE rolle = 'orga'",               // nur noch Gast und Orga (= admin): alte Orga wird volle Orga
+  "ALTER TABLE netz_logins ADD COLUMN nutzer_key TEXT NOT NULL DEFAULT ''", // Nutzername kleingeschrieben (JS, auch Umlaute) für die Bremse
   "ALTER TABLE tickets ADD COLUMN paypal_order TEXT NOT NULL DEFAULT ''",   // PayPal-Bestellung (Checkout) zum Ticket
   "ALTER TABLE tickets ADD COLUMN paypal_capture TEXT NOT NULL DEFAULT ''", // PayPal-Transaktions-ID nach erfolgreicher Zahlung
 ];
@@ -1068,7 +1069,7 @@ const AKTIONEN = {
     const orderId = String(body.orderId || "").slice(0, 64);
     const t = orderId && await eins(env, "SELECT * FROM tickets WHERE paypal_order = ? AND user_id = ?", orderId, u.id);
     if (!t) throw new F(404, "Zu dieser PayPal-Zahlung gibt es kein Ticket.");
-    if (t.status === "bezahlt") return { ticket: await ticketDetail(env, t.id) };
+    if (t.status === "bezahlt") return { ticket: gastTicket(await ticketDetail(env, t.id)) };
     if (t.status !== "offen") throw new F(409, "Das Ticket ist storniert – es wurde nichts abgebucht.");
     await paypalEinziehen(c, t, orderId);
     return { ticket: gastTicket(await ticketDetail(env, t.id)) };
@@ -1943,8 +1944,8 @@ async function portalPruefen(env, body, speichern) {
   const [[fehl], [fehlNick]] = await lesen(env,
     mac && !body.macUnsicher
       ? ["SELECT COUNT(*) AS n FROM netz_logins WHERE mac = ? AND ok = 0 AND at > ?", mac, seit]
-      : ["SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND quelle = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), quelle, seit],
-    ["SELECT COUNT(*) AS n FROM netz_logins WHERE lower(nutzer) = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), seit]);
+      : ["SELECT COUNT(*) AS n FROM netz_logins WHERE nutzer_key = ? AND quelle = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), quelle, seit],
+    ["SELECT COUNT(*) AS n FROM netz_logins WHERE nutzer_key = ? AND ok = 0 AND at > ?", nutzer.toLowerCase(), seit]);
   if (nutzer && (fehl.n >= 10 || fehlNick.n >= 30)) return { ok: false, meldung: "Zu viele Fehlversuche. Bitte warte 10 Minuten oder melde dich bei der Orga.", grund: "gebremst" };
 
   const t = !nutzer ? null : await eins(env, `SELECT t.*, u.nick, u.gesperrt, s.label AS sitz_label FROM tickets t
@@ -1965,8 +1966,8 @@ async function portalPruefen(env, body, speichern) {
   }
   const ok = !grund;
   if (speichern) {
-    await los(env, "INSERT INTO netz_logins (at, lan_id, ticket_id, mac, ip, nutzer, ok, grund, quelle) VALUES (?,?,?,?,?,?,?,?,?)",
-      jetzt, lan.id, t ? t.id : null, mac, ip, nutzer, ok ? 1 : 0, grund, quelle);
+    await los(env, "INSERT INTO netz_logins (at, lan_id, ticket_id, mac, ip, nutzer, nutzer_key, ok, grund, quelle) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      jetzt, lan.id, t ? t.id : null, mac, ip, nutzer, nutzer.toLowerCase(), ok ? 1 : 0, grund, quelle);
     if (ok && !t.freigeschaltet_at) await los(env, "UPDATE tickets SET freigeschaltet_at = ? WHERE id = ?", jetzt, t.id);
     // Datenschutz: alte Geräte-Einträge verfallen von selbst.
     const tage = Math.max(1, Number(e.aufbewahrungTage) || 30);
