@@ -1,5 +1,5 @@
 // Sitzplan als SVG zeichnen – gemeinsam für die öffentliche Ansicht und den Editor.
-import { esc } from "./ui.js?v=41";
+import { esc } from "./ui.js?v=42";
 
 export const U = 30; // Pixel je Rastereinheit (Zoom 1)
 
@@ -43,8 +43,10 @@ export function tischeSvg(sitze) {
     }
   }
   return tische.map((t) => {
-    const x = t.x * U - 3, y = t.y * U + 1, w = U + 6, h = 2 * U - 2;
-    return `<g class="tisch"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="5"></rect><line x1="${x + 3}" y1="${y + h / 2}" x2="${x + w - 3}" y2="${y + h / 2}"></line></g>`;
+    // leiser Holzton hinter beiden Plätzen (bleibt in der eigenen Spalte) + Steg zwischen ihnen
+    const x = t.x * U + 0.5, y = t.y * U + 0.5, w = U - 1, h = 2 * U - 1;
+    const sx = t.x * U + U / 2 - 6, sy = (t.y + 1) * U - 3;
+    return `<g class="tisch"><rect class="tisch-flaeche" x="${x}" y="${y}" width="${w}" height="${h}" rx="7"></rect><rect class="tisch-steg" x="${sx}" y="${sy}" width="12" height="6" rx="2"></rect></g>`;
   }).join("");
 }
 

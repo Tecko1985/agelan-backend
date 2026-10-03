@@ -369,8 +369,8 @@ details.faq > div { padding: 0 4px 16px; color: var(--leise); white-space: pre-w
 .sitz.gewaehlt rect { stroke: #fff; stroke-width: 3; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8)); }
 .sitz.markiert rect { stroke: var(--gold2); stroke-width: 3; stroke-dasharray: 3 2; }
 .tisch { pointer-events: none; }
-.tisch rect { fill: rgba(150, 102, 52, 0.45); stroke: rgba(214, 160, 92, 0.75); stroke-width: 2; }
-.tisch line { stroke: rgba(214, 160, 92, 0.7); stroke-width: 2; }
+.tisch .tisch-flaeche { fill: rgba(170, 118, 62, 0.22); }
+.tisch .tisch-steg { fill: #a8763f; }
 .deko rect { rx: 6; }
 .deko text { font: 600 11px var(--sans); fill: rgba(255, 255, 255, 0.75); pointer-events: none; }
 .deko.f-gold rect { fill: rgba(232, 182, 76, 0.16); stroke: rgba(232, 182, 76, 0.55); }
