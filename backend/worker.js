@@ -577,10 +577,14 @@ const AKTIONEN = {
       [`SELECT * FROM ticket_types WHERE lan_id = ${AKTIVE_LAN} AND aktiv = 1 ORDER BY sort, id`],
       [`SELECT type_id, COUNT(*) AS n FROM tickets WHERE lan_id = ${AKTIVE_LAN} AND status != 'storniert' GROUP BY type_id`],
       ...zahlenAbfragen(null),
-      ["SELECT id, titel, teaser, datum FROM news ORDER BY datum DESC, id DESC LIMIT 30"]);
+      ["SELECT id, titel, teaser, datum FROM news ORDER BY datum DESC, id DESC LIMIT 30"],
+      [`SELECT MAX(stufe) AS max, COUNT(*) AS n FROM seats WHERE lan_id = ${AKTIVE_LAN} AND gesperrt = 0`]);
     if (!lan) throw new F(500, "Keine LAN angelegt.");
     const e = einstellungenAus(einstZeilen);
     const z = zahlenAus(lan, rest.slice(0, 3));
+    // Stages: aktive Stage, letzte Stage und wie viele Plätze es am Ende gibt (für den Hinweis bei der Belegung)
+    const [st] = rest[4] || [];
+    if (st && st.max > 1) z.stage = { aktiv: Math.min(lan.stufe_aktiv || 1, st.max), max: st.max, gesamt: Math.min(st.n, lan.gaeste_limit || st.n), auto: lan.stufe_auto == null ? true : !!lan.stufe_auto };
     const news = rest[3];
     const tag = heute();
     const einst = {};
