@@ -736,14 +736,15 @@ const AKTIONEN = {
   async ich(c) {
     const { env } = c;
     const u = brauchtLogin(c);
-    const [[lan], [tz], [gm], einstZeilen, ueb] = await lesen(env,
+    const [[lan], [tz], [gm], einstZeilen, ueb, [admin]] = await lesen(env,
       [`SELECT * FROM lans WHERE id = ${AKTIVE_LAN}`],
       [TICKET_SQL + ` WHERE t.user_id = ? AND t.lan_id = ${AKTIVE_LAN} AND t.status != 'storniert' LIMIT 1`, u.id],
       [`SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ${AKTIVE_LAN}`, u.id],
       [EINSTELLUNGEN_SQL],
       [`SELECT ue.id, ue.von_id, ue.an_id, uv.nick AS von_nick, ua.nick AS an_nick, ue.created_at FROM uebergaben ue
         JOIN users uv ON uv.id = ue.von_id JOIN users ua ON ua.id = ue.an_id
-        WHERE ue.lan_id = ${AKTIVE_LAN} AND (ue.von_id = ? OR ue.an_id = ?) ORDER BY ue.id`, u.id, u.id]);
+        WHERE ue.lan_id = ${AKTIVE_LAN} AND (ue.von_id = ? OR ue.an_id = ?) ORDER BY ue.id`, u.id, u.id],
+      ["SELECT 1 AS x FROM users WHERE rolle = 'admin' LIMIT 1"]);
     if (!lan) throw new F(500, "Keine LAN angelegt.");
     const ticket = tz ? gastTicket(ticketAus(tz)) : null;
     if (ticket && ticket.checkinAt) ticket.zugang = zugangAus(einstellungenAus(einstZeilen), ticket);
@@ -752,6 +753,7 @@ const AKTIONEN = {
       ticket,
       gruppe: gm ? await gruppeDetail(env, gm.group_id, u.id) : null,
       alter: alterAm(u.geburtsdatum, lan.start || heute()),
+      ersteinrichtung: !admin, // noch kein Veranstalter → „Veranstalter werden“ anbieten
       // anfragen: wer mein Ticket übernehmen möchte; meineAnfrage: von wem ich ein Ticket übernehmen möchte
       uebergabe: {
         anfragen: ueb.filter((x) => x.von_id === u.id).map((x) => ({ id: x.id, nick: x.an_nick, at: x.created_at })),
@@ -855,6 +857,8 @@ const AKTIONEN = {
   async veranstalterWerden(c) {
     const u = brauchtLogin(c);
     if (!c.env.ADMIN_SETUP) throw new F(500, "Secret ADMIN_SETUP fehlt.");
+    // Nur zur Ersteinrichtung: Gibt es schon einen Veranstalter, vergibt der die Rolle unter Verwaltung → Benutzer.
+    if (await eins(c.env, "SELECT 1 AS x FROM users WHERE rolle = 'admin' LIMIT 1")) throw new F(403, "Es gibt schon einen Veranstalter. Die Rolle vergibt ein Veranstalter unter Verwaltung → Benutzer.");
     if (!bremseOffen(c.ip)) throw new F(429, "Zu viele Fehlversuche.");
     if (!(await gleich(String(c.body.passwort || ""), c.env.ADMIN_SETUP))) { bremseFehlschlag(c.ip); throw new F(403, "Falsches Passwort."); }
     await los(c.env, "UPDATE users SET rolle = 'admin' WHERE id = ?", u.id);

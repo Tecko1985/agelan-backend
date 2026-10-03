@@ -1,12 +1,12 @@
 // Check-in: QR-Code scannen (oder Name suchen), Ticket prüfen, einchecken.
 // Kein Etikett mehr: Die Internet-Zugangsdaten erscheinen danach auf dem Handy
 // des Gastes (Ticket-QR scannen → Ticket-Seite, oder im Konto).
-import { api } from "./api.js?v=61";
-import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=61";
-import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=61";
+import { api } from "./api.js?v=62";
+import { zustand, neuLaden, istOrga, beimVerlassen } from "./app.js?v=62";
+import { esc, $, $$, euro, zeit, codeGruppen, toast, fehler, mitSperre } from "./ui.js?v=62";
 
 // jsQR (1.4.0, UMD, setzt window.jsQR) liegt lokal neben diesem Modul.
-const JSQR = new URL("./jsqr.js?v=61", import.meta.url).href;
+const JSQR = new URL("./jsqr.js?v=62", import.meta.url).href;
 function alterAm(geb, stichtag) {
   if (!geb) return null;
   const [gj, gm, gt] = geb.split("-").map(Number);

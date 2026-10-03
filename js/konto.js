@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=61";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=61";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=61";
+import { api, tokenSetzen } from "./api.js?v=62";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=62";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=62";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -211,7 +211,7 @@ export async function render(main) {
           <dt>Geburtstag</dt><dd>${esc(u.geburtsdatum)}</dd>${u.discord ? `<dt>Discord</dt><dd>${esc(u.discord)}</dd>` : ""}
           ${u.rolle !== "user" ? `<dt>Rolle</dt><dd><span class="abzeichen gold">${u.rolle === "admin" ? "Veranstalter" : "Orga"}</span></dd>` : ""}</dl>
           <div class="zeile" style="margin-top:14px"><button class="knopf klein" data-daten>Daten ändern</button>
-          ${u.rolle !== "admin" ? `<button class="knopf klein geist" data-veranstalter>Veranstalter werden</button>` : ""}</div></div>
+          ${u.rolle !== "admin" && zustand.ich.ersteinrichtung ? `<button class="knopf klein geist" data-veranstalter>Veranstalter werden</button>` : ""}</div></div>
       </div>
     </div>${ticketUnten}</div>`;
 

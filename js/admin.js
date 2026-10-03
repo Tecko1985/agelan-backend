@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=61";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=61";
-import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=61";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=61";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=61";
+import { api, istDemo } from "./api.js?v=62";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=62";
+import { planSvg, planGroesse, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=62";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=62";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=62";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=61");
+    const { ticketHtml } = await import("./konto.js?v=62");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -413,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=61");
+  planModul = await import("./planeditor.js?v=62");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -883,7 +883,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=61");
+    const { ticketHtml } = await import("./konto.js?v=62");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -1008,6 +1008,8 @@ async function benutzer(box) {
     <div class="tabelle-wrap"><table><thead><tr><th>Nick</th><th>Name</th><th>E-Mail</th><th>Geburtstag</th><th>Ticket</th><th>Rolle</th><th title="Darf sich in der AgeLan-App in den Streamplan eintragen">Streamer</th><th></th></tr></thead><tbody id="b-liste"></tbody></table></div>`;
   const zeichnen = () => {
     const q = $("[data-q]", box).value.trim().toLowerCase();
+    const anzahl = box.querySelector("h1 .leise, h2 .leise");
+    if (anzahl) anzahl.textContent = `(${bs.length})`;
     $("#b-liste", box).innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
       <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}${u.vorOrt ? ` <span class="abzeichen" title="An der Tür von der Orga angelegt">vor Ort</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email.endsWith("@vor-ort.invalid") ? "–" : u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
@@ -1015,6 +1017,8 @@ async function benutzer(box) {
       <td><input type="checkbox" data-streamer="${u.id}" ${u.streamer ? "checked" : ""}></td>
       <td style="white-space:nowrap"><button class="knopf klein" data-pw="${u.id}">Passwort neu</button> <button class="knopf klein geist" data-sperren="${u.id}">${u.gesperrt ? "Entsperren" : "Sperren"}</button>${u.rolle !== "admin" ? ` <button class="knopf klein rot" data-loeschen="${u.id}">Löschen</button>` : ""}</td></tr>`).join("");
     $$("[data-rolle]", box).forEach((s) => (s.onchange = async () => {
+      const ziel = bs.find((u) => u.id === Number(s.dataset.rolle));
+      if (s.value === "admin" && !(await bestaetigen(`${ziel.nick} zum Veranstalter machen? Veranstalter haben vollen Zugriff auf alles – auch auf Zahlungen, Einstellungen und Konten.`, { ja: "Veranstalter machen", gefahr: true }))) { s.value = ziel.rolle; return; }
       try { await api("adminBenutzerAendern", { userId: Number(s.dataset.rolle), rolle: s.value }); bs.find((u) => u.id === Number(s.dataset.rolle)).rolle = s.value; toast("Rolle geändert.", "ok"); } catch (e) { fehler(e); zeichnen(); }
     }));
     $$("[data-streamer]", box).forEach((c) => (c.onchange = async () => {
