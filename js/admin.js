@@ -1,8 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=22";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=22";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=22";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=22";
+import { api, istDemo } from "./api.js?v=23";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=23";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=23";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=23";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=23";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -113,7 +114,7 @@ async function gaeste(box) {
   const d = await api("adminTickets", { lanId });
   const typen = [...new Set(d.tickets.map((t) => t.typ.name))];
   const gruppenNamen = [...new Set(d.tickets.map((t) => t.gruppe).filter(Boolean))].sort();
-  box.innerHTML = kopf(`Gäste <span class="leise">(${d.tickets.filter((t) => t.status !== "storniert").length})</span>`, `<button class="knopf klein" data-csv>CSV</button>`) + `
+  box.innerHTML = kopf(`Gäste <span class="leise">(${d.tickets.filter((t) => t.status !== "storniert").length})</span>`, `<button class="knopf primaer klein" data-vorort>+ Gast vor Ort</button><button class="knopf klein" data-csv>CSV</button>`) + `
     <div class="filter">
       <input data-f="q" placeholder="Suche: Nick, Name, E-Mail, Platz">
       <select data-f="status"><option value="">Alle Status</option><option value="offen">Zahlung offen</option><option value="bezahlt">Bezahlt</option><option value="storniert">Storniert</option></select>
@@ -158,6 +159,7 @@ async function gaeste(box) {
     }))));
   };
   $$("[data-f]", box).forEach((i) => (i.oninput = zeichnen));
+  $("[data-vorort]", box).onclick = (e) => mitSperre(e.currentTarget, () => gastVorOrt(d.lan, (neu) => { d.tickets.unshift(neu); zeichnen(); }));
   $("[data-csv]", box).onclick = () => {
     const zeilen = [["Nick", "Vorname", "Nachname", "E-Mail", "Geburtsdatum", "Ticket", "Status", "Zahlart", "Preis", "Bezahlt am", "Gruppe", "Platz", "Check-in", "OTP", "Hinweis", "Orga-Notiz"]];
     liste().forEach((t) => zeilen.push([t.nutzer.nick, t.nutzer.vorname, t.nutzer.nachname, t.nutzer.email, t.nutzer.geburtsdatum, t.typ.name, t.status, t.zahlartText,
@@ -251,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=22");
+    const { ticketHtml } = await import("./konto.js?v=23");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -366,7 +368,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=22");
+  planModul = await import("./planeditor.js?v=23");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -636,6 +638,97 @@ async function sitzStatusBearbeiten(l) {
 }
 
 // ---------------------------------------------------------------------------
+// Gast ohne Konto an der Tür: Konto + Ticket + Platz (+ Check-in) in einem Schritt.
+async function gastVorOrt(lan, fertig) {
+  const { tickettypen } = await api("adminTickettypen", { lanId: lan.id });
+  const typen = tickettypen.filter((x) => x.aktiv);
+  if (!typen.length) { toast("Für diese LAN gibt es keine aktive Ticketsorte."); return; }
+  const admin = istAdmin();
+  const m = modal("Gast vor Ort anlegen – " + lan.name, `<form class="formular" autocomplete="off">
+    <p class="klein leise" style="margin:0">Für Gäste ohne Konto: Es wird ein Konto mit Zufallspasswort angelegt, dazu das Ticket. Die Zugangsdaten zeigst du dem Gast danach.</p>
+    <div class="zwei"><label class="feld"><span>Nickname</span><input name="nick" required maxlength="24"></label>
+      <label class="feld"><span>Geburtsdatum</span><input name="geburtsdatum" type="date" required></label></div>
+    <div class="zwei"><label class="feld"><span>Vorname</span><input name="vorname" required></label><label class="feld"><span>Nachname</span><input name="nachname" required></label></div>
+    <label class="feld"><span>E-Mail (optional)</span><input name="email" type="email" placeholder="leer lassen, wenn keine angegeben"></label>
+    <div class="zwei"><label class="feld"><span>Ticketsorte</span><select name="typId">${typen.map((x) => `<option value="${x.id}" data-sitz="${x.mitSitz ? 1 : 0}" data-preis="${x.preisCent}">${esc(x.name)} · ${euro(x.preisCent)}</option>`).join("")}</select></label>
+      <label class="feld" data-platzfeld><span>Platz</span><div class="zeile" style="gap:8px;flex-wrap:nowrap">
+        <input name="sitz" readonly placeholder="kein Platz" style="cursor:pointer" data-sitzwahl><button type="button" class="knopf" data-sitzwahl>Sitzplan</button></div></label></div>
+    ${admin ? `<label class="feld"><span>Preis (€, leer = Preis der Ticketsorte)</span><input name="preis" type="number" step="0.01" min="0"></label>` : ""}
+    <div class="zeile"><label class="check"><input type="checkbox" name="bezahlt" checked> Bar bezahlt</label>
+      <label class="check"><input type="checkbox" name="einchecken" checked> Gleich einchecken</label></div>
+    <label class="feld"><span>Orga-Notiz (optional)</span><input name="orgaNotiz" placeholder="z. B. Muttizettel liegt vor"></label>
+    <div class="fehler-text"></div><button class="knopf primaer">Gast anlegen</button></form>`, { breit: true });
+  const f = $("form", m.el);
+  const typWahl = () => {
+    const o = f.typId.selectedOptions[0];
+    const mitSitz = o && o.dataset.sitz === "1";
+    $("[data-platzfeld]", f).classList.toggle("versteckt", !mitSitz);
+    if (!mitSitz) f.sitz.value = "";
+  };
+  f.typId.onchange = typWahl;
+  typWahl();
+  f.bezahlt.onchange = () => { if (!f.bezahlt.checked) f.einchecken.checked = false; };
+  f.einchecken.onchange = () => { if (f.einchecken.checked) f.bezahlt.checked = true; };
+  $$("[data-sitzwahl]", f).forEach((x) => (x.onclick = (e) => {
+    e.preventDefault();
+    const platzhalter = { lanId: lan.id, sitzId: null, sitz: "", nutzer: { nick: f.nick.value.trim() || "neuen Gast" } };
+    mitSperre($("button[data-sitzwahl]", f), () => platzWaehlen(platzhalter, f.sitz));
+  }));
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    mitSperre($("button.primaer", f), async () => {
+      const v = formDaten(f);
+      try {
+        let sitzId = "";
+        if (v.sitz) {
+          const plan = await api("sitzplan", { lanId: lan.id });
+          const s = plan.sitze.find((x) => x.label.toLowerCase() === v.sitz.toLowerCase());
+          if (!s) throw new Error("Platz „" + v.sitz + "“ gibt es nicht.");
+          sitzId = s.id;
+        }
+        const preis = admin && String(v.preis || "").trim() !== "" ? Math.round(Number(v.preis) * 100) : null;
+        if (preis != null && (!Number.isFinite(preis) || preis < 0)) throw new Error("Bitte einen gültigen Preis eingeben.");
+        const r = await api("adminGastAnlegen", {
+          lanId: lan.id, nick: v.nick, vorname: v.vorname, nachname: v.nachname, geburtsdatum: v.geburtsdatum, email: v.email,
+          typId: Number(v.typId), sitzId, bezahlt: v.bezahlt, zahlart: "bar", einchecken: v.einchecken, orgaNotiz: v.orgaNotiz, preisCent: preis,
+        });
+        m.schliessen();
+        fertig(r.ticket);
+        gastZugangZeigen(r);
+      } catch (err) { $(".fehler-text", f).textContent = err.message; }
+    });
+  };
+}
+
+// Nach dem Anlegen: Zugangsdaten einmalig zeigen. Der Gast scannt den QR mit dem Handy
+// und hat dann sein Ticket samt Internet-Zugang; mit Nick + Passwort kommt er ins Konto und die App.
+function gastZugangZeigen(r) {
+  const t = r.ticket;
+  const zeile = (label, wert) => `<div class="zugang-feld"><span>${esc(label)}</span><b class="mono">${esc(wert)}</b><button class="knopf klein geist" data-kopieren="${esc(wert)}">Kopieren</button></div>`;
+  const m = modal("Gast angelegt: " + t.nutzer.nick, `<div class="stapel">
+    ${r.hinweis ? `<div class="abzeichen gold" style="white-space:normal;padding:8px 12px">${esc(r.hinweis)}</div>` : ""}
+    <div class="zeile" style="align-items:flex-start;gap:18px">
+      <div style="background:#fff;padding:10px;border-radius:8px;width:180px;max-width:45vw">${qrSvg(ticketLink(t.code))}</div>
+      <div style="flex:1;min-width:200px">
+        <p class="klein leise" style="margin-top:0">Gast scannt den QR-Code mit dem Handy: Dort stehen Ticket${t.checkinAt ? " und Internet-Zugang" : ""}.</p>
+        <div class="karte" style="padding:12px">
+          <div class="ueberzeile" style="margin-bottom:6px">Konto (Website und AgeLan-App)</div>
+          ${zeile("Nickname", t.nutzer.nick)}${zeile("Passwort", r.passwort)}
+          ${t.otp ? `<div class="ueberzeile" style="margin:10px 0 6px">Internet</div>${zeile("Code", t.otp)}` : ""}
+        </div>
+        <p class="klein leise">Platz: <b>${esc(t.sitz || "–")}</b> · ${t.checkinAt ? "eingecheckt" : "noch nicht eingecheckt"} · ${t.status === "bezahlt" ? "bezahlt" : "Zahlung offen"}</p>
+      </div></div>
+    <p class="klein gold" style="margin:0">Das Passwort wird nur jetzt angezeigt. Vergessen? Verwaltung → Benutzer → Passwort zurücksetzen.</p>
+    <div class="zeile"><button class="knopf primaer" data-drucken>Ticket drucken</button><button class="knopf geist" data-fertig>Fertig</button></div></div>`, { breit: true });
+  kopierenVerdrahten(m.el);
+  $("[data-fertig]", m.el).onclick = () => m.schliessen();
+  $("[data-drucken]", m.el).onclick = async () => {
+    const { ticketHtml } = await import("./konto.js?v=23");
+    drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Platz für ein Ticket im Sitzplan auswählen. Frei, von einer Gruppe vorgemerkt
 // oder gesperrt darf die Orga vergeben; Plätze anderer Gäste nicht.
 // Übernimmt nur ins Formular – gespeichert wird mit „Speichern“ im Ticket-Dialog.
@@ -756,7 +849,7 @@ async function benutzer(box) {
   const zeichnen = () => {
     const q = $("[data-q]", box).value.trim().toLowerCase();
     $("#b-liste", box).innerHTML = bs.filter((u) => !q || [u.nick, u.vorname, u.nachname, u.email].join(" ").toLowerCase().includes(q)).map((u) => `<tr>
-      <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
+      <td><b>${esc(u.nick)}</b>${u.gesperrt ? ` <span class="abzeichen rot">gesperrt</span>` : ""}${u.vorOrt ? ` <span class="abzeichen" title="An der Tür von der Orga angelegt">vor Ort</span>` : ""}</td><td>${esc(u.vorname)} ${esc(u.nachname)}</td><td class="klein">${esc(u.email.endsWith("@vor-ort.invalid") ? "–" : u.email)}</td><td class="klein">${esc(u.geburtsdatum)}</td>
       <td>${u.ticket ? `<span class="abzeichen ${u.ticket === "bezahlt" ? "gruen" : "gold"}">${esc(u.ticket)}</span>` : `<button class="knopf klein geist" data-ticket="${u.id}">+ Ticket</button>`}</td>
       <td><select data-rolle="${u.id}" style="width:auto;padding:5px 8px">${[["user", "Gast"], ["orga", "Orga"], ["admin", "Veranstalter"]].map(([k, l]) => `<option value="${k}" ${u.rolle === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       <td><input type="checkbox" data-streamer="${u.id}" ${u.streamer ? "checked" : ""}></td>

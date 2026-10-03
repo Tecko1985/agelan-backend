@@ -1,4 +1,4 @@
-import { API_URL } from "./config.js?v=22";
+import { API_URL } from "./config.js?v=23";
 
 const TOKEN_KEY = "agelan-token";
 const params = new URLSearchParams(location.search);
@@ -30,7 +30,7 @@ export async function api(aktion, daten = {}) {
   let res;
   try {
     if (istDemo) {
-      if (!demoWorker) demoWorker = (await import("./demo.js?v=22")).starten();
+      if (!demoWorker) demoWorker = (await import("./demo.js?v=23")).starten();
       res = await (await demoWorker).fetch(req);
     } else {
       res = await fetch(req);

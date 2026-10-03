@@ -114,6 +114,7 @@ const MIGRATIONEN = [
   "ALTER TABLE users ADD COLUMN discord_id TEXT NOT NULL DEFAULT ''",   // für die AgeLan-App (Discord-DMs)
   "ALTER TABLE users ADD COLUMN streamer INTEGER NOT NULL DEFAULT 0",   // darf sich im Streamplan eintragen
   "ALTER TABLE seats ADD COLUMN orga INTEGER NOT NULL DEFAULT 0",       // für die Orga reserviert
+  "ALTER TABLE users ADD COLUMN vorort_lan INTEGER",                    // vor Ort von der Orga angelegt (für diese LAN)
   "ALTER TABLE netz_logins ADD COLUMN quelle TEXT NOT NULL DEFAULT ''", // IP des Absenders (Portal-Server bzw. Angreifer)
 ];
 
@@ -462,7 +463,7 @@ function nutzerOeffentlich(u) {
   return {
     id: u.id, nick: u.nick, email: u.email, vorname: u.vorname, nachname: u.nachname,
     geburtsdatum: u.geburtsdatum, discord: u.discord, rolle: u.rolle, gesperrt: !!u.gesperrt, createdAt: u.created_at,
-    streamer: !!u.streamer,
+    streamer: !!u.streamer, vorOrt: u.vorort_lan || null,
   };
 }
 function typAus(t) {
@@ -1063,6 +1064,51 @@ const AKTIONEN = {
     return { ticket: await ticketDetail(env, r.meta.last_row_id) };
   },
 
+  // Gast ohne Konto direkt an der Tür: Konto + Ticket (+ Platz, + Check-in) in einem Schritt.
+  // Das Konto bekommt ein Zufallspasswort, das die Orga dem Gast einmalig nennt (Konto/App).
+  async adminGastAnlegen(c) {
+    const { env, body } = c;
+    const ich = brauchtOrga(c);
+    const lan = await lanAusBody(c);
+    const nick = nickPruefen(body.nick);
+    const vorname = text(body.vorname, 60, "Vorname", true), nachname = text(body.nachname, 60, "Nachname", true);
+    const geburtsdatum = datumPruefen(body.geburtsdatum, "Geburtsdatum");
+    if (!geburtsdatum) throw new F(400, "Geburtsdatum fehlt (wegen der Altersgrenze).");
+    if (await eins(env, "SELECT id FROM users WHERE nick_key = ?", nick.toLowerCase())) throw new F(409, "Den Nickname „" + nick + "“ gibt es schon. Hat der Gast schon ein Konto? Dann in der Benutzerliste ein Ticket anlegen.");
+    let email = String(body.email || "").trim();
+    if (email) {
+      email = mailPruefen(email);
+      if (await eins(env, "SELECT id FROM users WHERE email_key = ?", email.toLowerCase())) throw new F(409, "Mit dieser E-Mail gibt es schon ein Konto.");
+    } else email = nick.toLowerCase().replace(/[^a-z0-9]+/g, "") + "-" + hex(zufallsBytes(3)) + "@vor-ort.invalid"; // Platzhalter, eindeutig
+    const typ = await eins(env, "SELECT * FROM ticket_types WHERE id = ? AND lan_id = ?", Number(body.typId), lan.id);
+    if (!typ) throw new F(404, "Ticketsorte nicht gefunden.");
+    const preis = ich.rolle === "admin" && body.preisCent != null ? ganz(body.preisCent, "Preis", 0, 1e6) : typ.preis_cent;
+    const bezahlt = !!body.bezahlt || preis === 0;
+    const zahlart = ZAHLARTEN[body.zahlart] ? body.zahlart : "bar";
+    const sitzId = body.sitzId ? String(body.sitzId) : "";
+    if (sitzId && !typ.mit_sitz) throw new F(400, "Diese Ticketsorte hat keinen Sitzplatz.");
+    if (body.einchecken && !bezahlt) throw new F(409, "Einchecken geht erst, wenn bezahlt ist.");
+    const passwort = zufallsCode(10);
+    const jetzt = Date.now();
+    const u = await los(env, `INSERT INTO users (nick, nick_key, email, email_key, vorname, nachname, geburtsdatum, pw, vorort_lan, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`, nick, nick.toLowerCase(), email, email.toLowerCase(), vorname, nachname, geburtsdatum, await passwortHashen(passwort), lan.id, jetzt);
+    const userId = u.meta.last_row_id;
+    const t = await los(env, `INSERT INTO tickets (lan_id, user_id, type_id, code, status, zahlart, preis_cent, created_at, bezahlt_at, bezahlt_von, orga_notiz)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`, lan.id, userId, typ.id, hex(zufallsBytes(16)), bezahlt ? "bezahlt" : "offen", zahlart, preis, jetzt,
+      bezahlt ? jetzt : null, bezahlt ? ich.nick : "", text(body.orgaNotiz, 500, "Notiz", false) || "Vor Ort angelegt von " + ich.nick);
+    const ticketId = t.meta.last_row_id;
+    try {
+      if (sitzId) await sitzSetzen(env, ticketId, userId, lan.id, sitzId, true);
+    } catch (e) {
+      // Platz inzwischen weg: Konto und Ticket bleiben, die Orga setzt den Platz nach.
+      await protokoll(c, "gast-vor-ort", { nick, platzFehler: e.message });
+      return { ticket: await ticketDetail(env, ticketId), passwort, hinweis: e.message + " Konto und Ticket sind angelegt – bitte den Platz im Ticket nachtragen." };
+    }
+    if (body.einchecken) await los(env, "UPDATE tickets SET checkin_at = ?, checkin_von = ?, otp = ? WHERE id = ?", jetzt, ich.nick, otpErzeugen(), ticketId);
+    await protokoll(c, "gast-vor-ort", { nick, typ: typ.name, platz: sitzId || "", eingecheckt: !!body.einchecken });
+    return { ticket: await ticketDetail(env, ticketId), passwort };
+  },
+
   // ---------- Verwaltung: Gruppen ----------
   async adminGruppen(c) {
     brauchtOrga(c);
@@ -1102,7 +1148,7 @@ const AKTIONEN = {
 
   // ---------- Verwaltung: Ticketsorten ----------
   async adminTickettypen(c) {
-    brauchtAdmin(c);
+    brauchtOrga(c); // nur lesen – die Orga braucht die Liste für „Gast vor Ort“
     const lan = await lanAusBody(c);
     const typen = await alle(c.env, "SELECT * FROM ticket_types WHERE lan_id = ? ORDER BY sort, id", lan.id);
     const verkauft = await alle(c.env, "SELECT type_id, COUNT(*) AS n FROM tickets WHERE lan_id = ? AND status != 'storniert' GROUP BY type_id", lan.id);
