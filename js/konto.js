@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=53";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=53";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=53";
+import { api, tokenSetzen } from "./api.js?v=55";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=55";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=55";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -159,14 +159,20 @@ export async function render(main) {
     formularVerdrahten(box, () => route());
     return;
   }
-  const { nutzer: u, ticket: t, gruppe: g, alter } = zustand.ich;
+  const { nutzer: u, ticket: t, gruppe: g, alter, uebergabe: ueb = { anfragen: [], meineAnfrage: null } } = zustand.ich;
   const d = zustand.daten;
   const za = d.einstellungen.zahlung;
 
   let ticketTeil, ticketUnten = "";
   if (!t) {
     ticketTeil = `<div class="karte glanz"><h2>Noch kein Ticket</h2><p class="leise">Für die ${esc(d.lan.name)} hast du noch kein Ticket.</p>
-      <a class="knopf primaer gross" href="#/tickets">Ticket kaufen</a></div>`;
+      <a class="knopf primaer gross" href="#/tickets">Ticket kaufen</a></div>
+      <div class="karte"><h3>Ticket von jemandem übernehmen</h3>
+      ${ueb.meineAnfrage
+        ? `<p>Du hast <b>${esc(ueb.meineAnfrage.nick)}</b> gebeten, dir das Ticket zu übergeben. Sobald ${esc(ueb.meineAnfrage.nick)} die Übergabe bestätigt, steht das Ticket hier.</p>
+          <div class="zeile"><button class="knopf klein" data-ueb-neu>Aktualisieren</button><button class="knopf klein geist" data-ueb-zurueck>Anfrage zurückziehen</button></div>`
+        : `<p class="leise klein" style="margin-top:0">Gibt dir jemand sein Ticket? Trag hier seinen Nickname ein. Die Person bestätigt die Übergabe dann im eigenen Konto – danach gehört das Ticket samt Platz dir.</p>
+          <form class="zeile" data-ueb-form style="align-items:end"><label class="feld" style="flex:1;margin:0"><span>Nickname des Weitergebers</span><input name="nick" autocomplete="off" required></label><button class="knopf">Anfragen</button></form>`}</div>`;
   } else {
     const schritte = [["Bestellt", true], ["Bezahlt", t.status === "bezahlt"], ["Platz", !!t.sitz || !t.typ.mitSitz], ["Eingecheckt", !!t.checkinAt]];
     const jetzt = schritte.findIndex(([, f]) => !f);
@@ -180,6 +186,10 @@ export async function render(main) {
         ${t.typ.mitSitz && !t.sitz && t.status === "offen" ? `<p class="leise klein" style="margin-top:12px">Deinen Platz suchst du dir aus, sobald die Orga deine Zahlung bestätigt hat.</p>` : ""}
         ${t.typ.mitSitz && !t.sitz && t.status === "bezahlt" ? `<div class="karte" style="border-color:var(--rand2);margin-top:12px"><b>Such dir deinen Platz aus!</b><p class="leise klein" style="margin:4px 0 10px">Freie Plätze findest du im Sitzplan.</p><a class="knopf primaer" href="#/sitzplan">Zum Sitzplan</a></div>` : ""}
         ${t.sitz ? `<p style="margin-top:14px">Dein Platz: <a class="abzeichen gold" href="#/sitzplan/${encodeURIComponent(t.sitz)}">${esc(t.sitz)}</a> ${t.checkinAt ? "" : `<a class="klein" href="#/sitzplan" style="margin-left:6px">ändern</a>`}</p>` : ""}
+        ${ueb.anfragen.map((a) => `<div class="karte" style="margin-top:12px;border-color:var(--gold)"><b>${esc(a.nick)} möchte dein Ticket übernehmen.</b>
+          <p class="leise klein" style="margin:4px 0 10px">Bestätigst du, gehört das Ticket${t.sitz ? " samt Platz " + esc(t.sitz) : ""} danach ${esc(a.nick)} – du hast dann kein Ticket mehr. Geld regelt ihr untereinander.</p>
+          <div class="zeile"><button class="knopf primaer klein" data-ueb-ja="${a.id}" data-nick="${esc(a.nick)}">Ticket übergeben</button><button class="knopf klein geist" data-ueb-nein="${a.id}">Ablehnen</button></div></div>`).join("")}
+        ${!t.checkinAt && !ueb.anfragen.length ? `<p class="leise klein" style="margin-top:12px">Du kannst nicht kommen? Gib dein Ticket weiter: Die Person, die es bekommen soll, trägt in ihrem Konto deinen Nickname <b>${esc(u.nick)}</b> ein. Danach bestätigst du hier.</p>` : ""}
         <a class="knopf klein geist" href="#/packliste" style="margin-top:14px">Packliste: Was brauche ich für die LAN?</a>
         ${alter != null && alter < 18 ? `<div class="karte" style="margin-top:12px;border-color:var(--gold)">Du bist zur LAN unter 18. Bitte bring den unterschriebenen Muttizettel und deine volljährige Aufsichtsperson mit.</div>` : ""}
       </div>`;
@@ -219,6 +229,20 @@ export async function render(main) {
   $$("[data-zahlart]", main).forEach((s) => (s.onchange = async () => {
     try { await api("zahlartAendern", { zahlart: s.value }); toast("Zahlart geändert.", "ok"); render(main); } catch (e) { fehler(e); }
   }));
+  // Ticket-Übergabe
+  const uf = $("[data-ueb-form]", main);
+  if (uf) uf.onsubmit = (e) => { e.preventDefault(); mitSperre($("button", uf), async () => {
+    try { const r = await api("uebergabeAnfragen", { nick: uf.nick.value }); toast("Anfrage an " + r.nick + " geschickt. Jetzt muss " + r.nick + " die Übergabe bestätigen.", "ok"); render(main); } catch (err) { fehler(err); }
+  }); };
+  const uz = $("[data-ueb-zurueck]", main);
+  if (uz) uz.onclick = () => mitSperre(uz, async () => { await api("uebergabeZurueckziehen"); toast("Anfrage zurückgezogen."); render(main); });
+  const un = $("[data-ueb-neu]", main);
+  if (un) un.onclick = () => render(main);
+  $$("[data-ueb-ja]", main).forEach((b) => (b.onclick = async () => {
+    if (!(await bestaetigen(`Dein Ticket wirklich an ${b.dataset.nick} übergeben? Das kannst du nicht selbst rückgängig machen.`, { ja: "Übergeben", gefahr: true }))) return;
+    mitSperre(b, async () => { try { await api("uebergabeAntworten", { id: Number(b.dataset.uebJa), annehmen: true }); toast("Ticket an " + b.dataset.nick + " übergeben.", "ok"); render(main); } catch (err) { fehler(err); } });
+  }));
+  $$("[data-ueb-nein]", main).forEach((b) => (b.onclick = () => mitSperre(b, async () => { await api("uebergabeAntworten", { id: Number(b.dataset.uebNein), annehmen: false }); toast("Anfrage abgelehnt."); render(main); })));
   $("[data-daten]", main).onclick = () => datenDialog(u, main);
   const ver = $("[data-veranstalter]", main);
   if (ver) ver.onclick = () => {

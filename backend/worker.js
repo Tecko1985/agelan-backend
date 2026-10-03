@@ -106,6 +106,11 @@ const SCHEMA = [
     nutzer TEXT NOT NULL DEFAULT '', ok INTEGER NOT NULL DEFAULT 0, grund TEXT NOT NULL DEFAULT '')`,
   `CREATE INDEX IF NOT EXISTS netz_logins_mac ON netz_logins(mac, at)`,
   `CREATE INDEX IF NOT EXISTS netz_logins_ticket ON netz_logins(ticket_id)`,
+  // Ticket-Übergabe zwischen zwei Konten: an_id bittet, von_id bestätigt (offene Anfragen; erledigte werden gelöscht).
+  `CREATE TABLE IF NOT EXISTS uebergaben (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, lan_id INTEGER NOT NULL,
+    von_id INTEGER NOT NULL, an_id INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uebergaben_an ON uebergaben(lan_id, an_id)`,
   `CREATE TABLE IF NOT EXISTS log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
     user_id INTEGER, aktion TEXT NOT NULL, details TEXT NOT NULL DEFAULT '')`,
@@ -725,11 +730,14 @@ const AKTIONEN = {
   async ich(c) {
     const { env } = c;
     const u = brauchtLogin(c);
-    const [[lan], [tz], [gm], einstZeilen] = await lesen(env,
+    const [[lan], [tz], [gm], einstZeilen, ueb] = await lesen(env,
       [`SELECT * FROM lans WHERE id = ${AKTIVE_LAN}`],
       [TICKET_SQL + ` WHERE t.user_id = ? AND t.lan_id = ${AKTIVE_LAN} AND t.status != 'storniert' LIMIT 1`, u.id],
       [`SELECT group_id FROM group_members WHERE user_id = ? AND lan_id = ${AKTIVE_LAN}`, u.id],
-      [EINSTELLUNGEN_SQL]);
+      [EINSTELLUNGEN_SQL],
+      [`SELECT ue.id, ue.von_id, ue.an_id, uv.nick AS von_nick, ua.nick AS an_nick, ue.created_at FROM uebergaben ue
+        JOIN users uv ON uv.id = ue.von_id JOIN users ua ON ua.id = ue.an_id
+        WHERE ue.lan_id = ${AKTIVE_LAN} AND (ue.von_id = ? OR ue.an_id = ?) ORDER BY ue.id`, u.id, u.id]);
     if (!lan) throw new F(500, "Keine LAN angelegt.");
     const ticket = tz ? ticketAus(tz) : null;
     if (ticket && ticket.checkinAt) ticket.zugang = zugangAus(einstellungenAus(einstZeilen), ticket);
@@ -738,7 +746,78 @@ const AKTIONEN = {
       ticket,
       gruppe: gm ? await gruppeDetail(env, gm.group_id, u.id) : null,
       alter: alterAm(u.geburtsdatum, lan.start || heute()),
+      // anfragen: wer mein Ticket übernehmen möchte; meineAnfrage: von wem ich ein Ticket übernehmen möchte
+      uebergabe: {
+        anfragen: ueb.filter((x) => x.von_id === u.id).map((x) => ({ id: x.id, nick: x.an_nick, at: x.created_at })),
+        meineAnfrage: (ueb.filter((x) => x.an_id === u.id).map((x) => ({ id: x.id, nick: x.von_nick, at: x.created_at })))[0] || null,
+      },
     };
+  },
+
+  // ---------- Ticket-Übergabe ----------
+  // 1. Wer das Ticket bekommen soll (eingeloggt, ohne eigenes Ticket), gibt den Nickname des Weitergebers an.
+  // 2. Der Weitergeber sieht die Anfrage in seinem Konto und bestätigt oder lehnt ab.
+  // Das Ticket wandert samt Platz und Zahlungsstatus; eingecheckte Tickets lassen sich nicht mehr übergeben.
+  async uebergabeAnfragen(c) {
+    const { env, body } = c;
+    const u = brauchtLogin(c);
+    const lan = await aktiveLan(env);
+    const nick = String(body.nick || "").trim().toLowerCase();
+    if (!nick) throw new F(400, "Bitte gib den Nickname an, von dem du das Ticket bekommst.");
+    if (await eins(env, "SELECT id FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id)) throw new F(409, "Du hast für diese LAN schon ein Ticket.");
+    const alter = alterAm(u.geburtsdatum, lan.start || heute());
+    if (alter !== null && alter < 16) throw new F(403, "Die Teilnahme ist leider erst ab 16 Jahren möglich.");
+    const von = await eins(env, "SELECT id, nick FROM users WHERE nick_key = ?", nick);
+    if (!von) throw new F(404, "Diesen Nickname gibt es nicht.");
+    if (von.id === u.id) throw new F(400, "Das bist du selbst.");
+    const t = await eins(env, "SELECT id, checkin_at FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", von.id, lan.id);
+    if (!t) throw new F(409, von.nick + " hat für diese LAN kein Ticket.");
+    if (t.checkin_at) throw new F(409, "Dieses Ticket ist schon eingecheckt und kann nicht mehr weitergegeben werden.");
+    await env.DB.batch([
+      st(env, "DELETE FROM uebergaben WHERE lan_id = ? AND an_id = ?", lan.id, u.id),
+      st(env, "INSERT INTO uebergaben (lan_id, von_id, an_id, created_at) VALUES (?,?,?,?)", lan.id, von.id, u.id, Date.now()),
+    ]);
+    await protokoll(c, "uebergabe-angefragt", { von: von.nick, an: u.nick });
+    return { ok: true, nick: von.nick };
+  },
+
+  async uebergabeZurueckziehen(c) {
+    const u = brauchtLogin(c);
+    const lan = await aktiveLan(c.env);
+    await los(c.env, "DELETE FROM uebergaben WHERE lan_id = ? AND an_id = ?", lan.id, u.id);
+    return { ok: true };
+  },
+
+  async uebergabeAntworten(c) {
+    const { env, body } = c;
+    const u = brauchtLogin(c);
+    const lan = await aktiveLan(env);
+    const a = await eins(env, "SELECT ue.*, ua.nick AS an_nick, ua.geburtsdatum AS an_geb FROM uebergaben ue JOIN users ua ON ua.id = ue.an_id WHERE ue.id = ? AND ue.von_id = ? AND ue.lan_id = ?",
+      Number(body.id) || 0, u.id, lan.id);
+    if (!a) throw new F(404, "Diese Anfrage gibt es nicht mehr.");
+    if (!body.annehmen) {
+      await los(env, "DELETE FROM uebergaben WHERE id = ?", a.id);
+      await protokoll(c, "uebergabe-abgelehnt", { von: u.nick, an: a.an_nick });
+      return { ok: true };
+    }
+    const t = await eins(env, "SELECT id, checkin_at FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert'", u.id, lan.id);
+    if (!t) throw new F(409, "Du hast kein Ticket für diese LAN.");
+    if (t.checkin_at) throw new F(409, "Dein Ticket ist schon eingecheckt und kann nicht mehr weitergegeben werden.");
+    const alter = alterAm(a.an_geb, lan.start || heute());
+    if (alter !== null && alter < 16) throw new F(403, a.an_nick + " ist zur LAN jünger als 16 und darf leider nicht teilnehmen.");
+    const notiz = "Übergeben von " + u.nick + " an " + a.an_nick + " am " + new Date().toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" });
+    // In EINER Anweisung: nur wenn der Empfänger weiterhin kein Ticket hat und noch nicht eingecheckt ist.
+    const r = await los(env, `UPDATE tickets SET user_id = ?, otp = '', freigeschaltet_at = NULL,
+        orga_notiz = TRIM(COALESCE(orga_notiz, '') || char(10) || ?, char(10) || ' ')
+      WHERE id = ? AND user_id = ? AND checkin_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM tickets WHERE user_id = ? AND lan_id = ? AND status != 'storniert')`,
+      a.an_id, notiz, t.id, u.id, a.an_id, lan.id);
+    if (!geaendert(r)) throw new F(409, a.an_nick + " hat inzwischen selbst ein Ticket – die Übergabe ist nicht mehr möglich.");
+    await env.DB.batch([
+      st(env, "DELETE FROM uebergaben WHERE lan_id = ? AND (von_id = ? OR an_id = ?)", lan.id, u.id, a.an_id),
+    ]);
+    await protokoll(c, "ticket-uebergeben", { ticket: t.id, von: u.nick, an: a.an_nick });
+    return { ok: true, nick: a.an_nick };
   },
 
   async kontoAendern(c) {
