@@ -1,6 +1,6 @@
-import { api, tokenSetzen } from "./api.js?v=23";
-import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=23";
-import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=23";
+import { api, tokenSetzen } from "./api.js?v=24";
+import { zustand, neuLaden, abmelden, route, gehe } from "./app.js?v=24";
+import { esc, $, $$, euro, zeitraum, codeGruppen, toast, fehler, modal, bestaetigen, formDaten, mitSperre, qrSvg, drucken, ticketLink, zugangHtml, kopierenVerdrahten, sichereUrl, berlinDatum } from "./ui.js?v=24";
 
 // ---------------------------------------------------------------------------
 // Anmelden / Registrieren
@@ -272,8 +272,12 @@ function datenDialog(u, main) {
 // ---------------------------------------------------------------------------
 function gruppeHtml(g) {
   if (!g) {
-    return `<div class="karte"><h3>Reservierungsgruppe</h3><p class="leise klein">Mit Freunden zusammen sitzen? Gründe eine Gruppe, merke einen Block Plätze vor und gib den Code weiter.</p>
-      <form class="zeile" data-gruppe-neu style="margin-bottom:10px"><input name="name" placeholder="Name der Gruppe" maxlength="30" style="flex:1;min-width:160px"><button class="knopf primaer">Gründen</button></form>
+    const e = (zustand.daten && zustand.daten.einstellungen) || {};
+    const gruenden = e.gruppenErlaubt !== false;
+    return `<div class="karte"><h3>Reservierungsgruppe</h3><p class="leise klein">${gruenden
+      ? `Mit Freunden zusammen sitzen? Gründe eine Gruppe, merke einen Block Plätze vor und gib den Code weiter. Eine Gruppe hält ihre Plätze ${e.gruppeHalteTage || 21} Tage.`
+      : "Neue Gruppen sind gerade nicht möglich. Mit einem Code kannst du einer bestehenden Gruppe beitreten."}</p>
+      ${gruenden ? `<form class="zeile" data-gruppe-neu style="margin-bottom:10px"><input name="name" placeholder="Name der Gruppe" maxlength="30" style="flex:1;min-width:160px"><button class="knopf primaer">Gründen</button></form>` : ""}
       <form class="zeile" data-gruppe-bei><input name="code" placeholder="Gruppen-Code" maxlength="10" style="flex:1;min-width:160px;text-transform:uppercase"><button class="knopf">Beitreten</button></form></div>`;
   }
   return `<div class="karte glanz"><div class="karte-kopf"><div><span class="ueberzeile">Reservierungsgruppe</span><h3 style="margin:0">${esc(g.name)}</h3></div>

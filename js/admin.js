@@ -1,9 +1,9 @@
 // Verwaltung für Orga (Gäste, Gruppen) und Veranstalter (alles).
-import { api, istDemo } from "./api.js?v=23";
-import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=23";
-import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=23";
-import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=23";
-import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso } from "./ui.js?v=23";
+import { api, istDemo } from "./api.js?v=24";
+import { zustand, neuLaden, istOrga, istAdmin } from "./app.js?v=24";
+import { planSvg, tooltipAnbinden, legendeHtml, sitzInfo, U } from "./plan.js?v=24";
+import { qrSvg, ticketLink, kopierenVerdrahten } from "./ui.js?v=24";
+import { esc, $, $$, euro, zeit, datum, zeitraum, toast, fehler, modal, bestaetigen, formDaten, mitSperre, drucken, berlinIso, berlinDatum } from "./ui.js?v=24";
 
 const REITER = [
   ["uebersicht", "Übersicht", false],
@@ -253,7 +253,7 @@ async function ticketDetails(t, fertig) {
     });
   };
   $("[data-ticket]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=23");
+    const { ticketHtml } = await import("./konto.js?v=24");
     const mm = modal("Ticket", `<div>${ticketHtml(t)}</div><div class="zeile" style="margin-top:14px"><button class="knopf primaer" data-d>Drucken</button></div>`, { breit: true });
     $("[data-d]", mm.el).onclick = () => drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
@@ -268,9 +268,26 @@ async function ticketDetails(t, fertig) {
 }
 
 // ---------------------------------------------------------------------------
+// Regeln für Reservierungsgruppen: Haltefrist, Verlängerung, Höchstdauer, Stichtag.
+function gruppenRegelnHtml(e, lan) {
+  const admin = istAdmin();
+  const stich = Number(e.gruppeStichtagTage);
+  const zahl = (name, wert, min, max, hinweis) => `<label class="feld"><span>${hinweis}</span><input name="${name}" type="number" min="${min}" max="${max}" value="${esc(String(wert))}" ${admin ? "" : "disabled"}></label>`;
+  return `<form class="karte formular" data-regeln style="margin-bottom:18px"><div class="karte-kopf"><h3 style="margin:0">Regeln für Reservierungsgruppen</h3><span class="klein leise" id="g-vorschau"></span></div>
+    <label class="check"><input type="checkbox" name="gruppenErlaubt" ${e.gruppenErlaubt !== false ? "checked" : ""} ${admin ? "" : "disabled"}> Gäste dürfen Gruppen gründen</label>
+    <div class="zwei">${zahl("gruppeHalteTage", e.gruppeHalteTage, 1, 365, "Haltefrist einer neuen Gruppe (Tage)")}${zahl("gruppeMaxSitze", e.gruppeMaxSitze, 1, 200, "Max. Plätze je Gruppe")}</div>
+    <label class="check"><input type="checkbox" name="gruppeVerlaengern" ${e.gruppeVerlaengern !== false ? "checked" : ""} ${admin ? "" : "disabled"}> Erneutes Vormerken verlängert die Haltefrist (wieder um die Haltefrist)</label>
+    <div class="zwei">${zahl("gruppeMaxTage", e.gruppeMaxTage ?? 60, 0, 3650, "Höchstdauer ab Gründung (Tage, 0 = keine)")}
+      ${zahl("gruppeStichtagTage", Number.isFinite(stich) && stich >= 0 ? stich : "", 0, 365, `Spätestens … Tage vor LAN-Beginn (leer = aus)${lan && lan.start ? "" : " – LAN hat noch keinen Termin"}`)}</div>
+    <p class="klein leise" style="margin:0">Abgelaufene Gruppen geben ihre vorgemerkten Plätze frei; Mitglieder mit Ticket behalten ihren eigenen Platz. Veranstalter können einzelne Fristen unten per Datum ändern.</p>
+    ${admin ? `<div class="zeile"><button class="knopf primaer">Regeln speichern</button><button type="button" class="knopf" data-fristen>Auf bestehende Gruppen anwenden</button></div>` : ""}</form>`;
+}
+
 async function gruppen(box) {
-  const { gruppen: gs } = await api("adminGruppen", { lanId });
-  box.innerHTML = kopf(`Reservierungsgruppen <span class="leise">(${gs.length})</span>`) + (gs.length ? `<div class="raster raster-2">${gs.map((g) => `
+  const [{ gruppen: gs }, { lans: alleLans }] = await Promise.all([api("adminGruppen", { lanId }), api("adminLans")]);
+  const lan = alleLans.find((l) => l.id === lanId);
+  const e = zustand.daten.einstellungen;
+  box.innerHTML = kopf(`Reservierungsgruppen <span class="leise">(${gs.length})</span>`) + gruppenRegelnHtml(e, lan) + (gs.length ? `<div class="raster raster-2">${gs.map((g) => `
     <div class="karte"><div class="karte-kopf"><div><h3 style="margin:0">${esc(g.name)}</h3><div class="klein leise">Leitung: ${esc(g.leitung)} · Code <span class="mono gold">${esc(g.code)}</span></div></div>
       <span class="abzeichen ${g.aktiv ? "blau" : "rot"}">${g.aktiv ? "Plätze " + g.fuellung : "abgelaufen"}</span></div>
       <div class="klein" style="margin-bottom:8px">${g.sitze.map((s) => `<span class="abzeichen ${s.besetzt ? "rot" : "blau"}">${esc(s.label)}</span>`).join(" ") || `<span class="leise">keine Plätze vorgemerkt</span>`}</div>
@@ -278,6 +295,34 @@ async function gruppen(box) {
       ${istAdmin() ? `<div class="zeile"><label class="klein leise">Hält bis <input type="date" data-ablauf="${g.id}" value="${berlinIso(g.ablauf)}" style="width:auto;padding:5px"></label>
         <button class="knopf klein" data-sitze="${g.id}">Plätze ändern</button><button class="knopf klein rot" data-loeschen="${g.id}">Auflösen</button></div>` : ""}
     </div>`).join("")}</div>` : `<div class="leer">Noch keine Gruppen.</div>`);
+  const rf = $("[data-regeln]", box);
+  // Vorschau: bis wann hält eine heute gegründete Gruppe?
+  const vorschau = () => {
+    const v = formDaten(rf), jetzt = Date.now();
+    if (!v.gruppenErlaubt) { $("#g-vorschau", box).textContent = "Gäste können keine Gruppen gründen."; return; }
+    let bis = jetzt + (Number(v.gruppeHalteTage) || 0) * 864e5;
+    if (Number(v.gruppeMaxTage) > 0) bis = Math.min(bis, jetzt + Number(v.gruppeMaxTage) * 864e5);
+    if (lan && lan.start && String(v.gruppeStichtagTage).trim() !== "") bis = Math.min(bis, Date.parse(lan.start + "T00:00:00") - Number(v.gruppeStichtagTage) * 864e5);
+    $("#g-vorschau", box).textContent = bis <= jetzt ? "Stichtag vorbei: keine neuen Gruppen mehr." : "Neue Gruppe heute hält bis " + berlinDatum(bis - 1);
+  };
+  rf.oninput = vorschau;
+  vorschau();
+  if (istAdmin()) {
+    rf.onsubmit = (ev) => { ev.preventDefault(); mitSperre($("button.primaer", rf), async () => {
+      const v = formDaten(rf);
+      const werte = [["gruppenErlaubt", v.gruppenErlaubt], ["gruppeHalteTage", Number(v.gruppeHalteTage)], ["gruppeMaxSitze", Number(v.gruppeMaxSitze)],
+        ["gruppeVerlaengern", v.gruppeVerlaengern], ["gruppeMaxTage", Number(v.gruppeMaxTage) || 0], ["gruppeStichtagTage", String(v.gruppeStichtagTage).trim() === "" ? -1 : Number(v.gruppeStichtagTage)]];
+      for (const [key, wert] of werte) await api("adminEinstellungSpeichern", { key, wert });
+      await neuLaden();
+      toast("Regeln gespeichert. Sie gelten für neue Gruppen und Verlängerungen.", "ok");
+      gruppen(box);
+    }); };
+    $("[data-fristen]", rf).onclick = async (ev) => {
+      const k = ev.currentTarget;
+      if (!(await bestaetigen("Gespeicherte Regeln (Höchstdauer, Stichtag) auf alle Gruppen dieser LAN anwenden? Fristen werden dabei nur gekürzt, nie verlängert.", { ja: "Anwenden" }))) return;
+      mitSperre(k, async () => { const r = await api("adminGruppenFristen", { lanId }); toast(r.gekuerzt ? `${r.gekuerzt} Gruppen gekürzt.` : "Keine Gruppe musste gekürzt werden.", "ok"); gruppen(box); });
+    };
+  }
   $$("[data-ablauf]", box).forEach((i) => (i.onchange = async () => {
     try { await api("adminGruppeAendern", { gruppeId: Number(i.dataset.ablauf), ablauf: i.value }); toast("Haltefrist geändert.", "ok"); gruppen(box); } catch (e) { fehler(e); }
   }));
@@ -368,7 +413,7 @@ async function netz(box) {
 // ---------------------------------------------------------------------------
 async function plan(box) {
   box.innerHTML = kopf("Sitzplan-Editor") + `<div id="a-editor"></div>`;
-  planModul = await import("./planeditor.js?v=23");
+  planModul = await import("./planeditor.js?v=24");
   await planModul.editor($("#a-editor", box), lanId);
 }
 
@@ -723,7 +768,7 @@ function gastZugangZeigen(r) {
   kopierenVerdrahten(m.el);
   $("[data-fertig]", m.el).onclick = () => m.schliessen();
   $("[data-drucken]", m.el).onclick = async () => {
-    const { ticketHtml } = await import("./konto.js?v=23");
+    const { ticketHtml } = await import("./konto.js?v=24");
     drucken(`<div style="max-width:190mm;margin:0 auto">${ticketHtml(t)}</div>`);
   };
 }
@@ -804,8 +849,7 @@ async function einstellungen(box) {
     <form class="karte formular" data-key="optionen"><h3>Optionen</h3>
       <label class="check"><input type="checkbox" name="gaesteOeffentlich" ${e.gaesteOeffentlich ? "checked" : ""}> Gästeliste und Namen im Sitzplan öffentlich</label>
       <label class="check"><input type="checkbox" name="sitzwahlOffen" ${e.sitzwahlOffen ? "checked" : ""}> Gäste dürfen ihren Platz selbst wählen</label>
-      <div class="zwei"><label class="feld"><span>Gruppen halten Plätze (Tage)</span><input name="gruppeHalteTage" type="number" min="1" value="${e.gruppeHalteTage}"></label>
-        <label class="feld"><span>Max. Plätze je Gruppe</span><input name="gruppeMaxSitze" type="number" min="1" value="${e.gruppeMaxSitze}"></label></div>
+      <p class="klein leise" style="margin:0">Regeln für Reservierungsgruppen (Haltefrist, Höchstdauer, Stichtag) stehen unter Verwaltung → Reservierungsgruppen.</p>
       <button class="knopf primaer">Speichern</button></form>
     <form class="karte formular" data-key="highlights"><h3>Highlights (Startseite)</h3>
       <label class="feld"><span>Eine pro Zeile: Icon | Titel | Text</span><textarea name="t" style="min-height:150px">${esc(e.highlights.map((h) => [h.icon, h.titel, h.text].join(" | ")).join("\n"))}</textarea></label>
@@ -824,7 +868,7 @@ async function einstellungen(box) {
     seite: (v) => [["seite", { titel: v.titel, slogan: v.slogan, headerInfo: v.headerInfo, socials: Object.fromEntries(["discord", "twitch", "youtube", "instagram", "facebook"].map((k) => [k, v["so_" + k].trim()])) }]],
     zahlung: (v) => [["zahlung", { arten: { paypal: v.a_paypal, ueberweisung: v.a_ueberweisung, bar: v.a_bar }, paypal: v.paypal, paypalMe: v.paypalMe, kontoinhaber: v.kontoinhaber, iban: v.iban, bank: v.bank, fristTage: Number(v.fristTage) || 0, hinweis: v.hinweis }]],
     netz: (v) => [["netz", { ssid: v.ssid.trim(), wlanPasswort: v.wlanPasswort, portal: v.portal.trim(), benutzer: v.benutzer, hinweis: v.hinweis, maxGeraete: Number(v.maxGeraete), aufbewahrungTage: Number(v.aufbewahrungTage) }]],
-    optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen], ["gruppeHalteTage", Math.max(1, Number(v.gruppeHalteTage) || 21)], ["gruppeMaxSitze", Math.max(1, Number(v.gruppeMaxSitze) || 10)]],
+    optionen: (v) => [["gaesteOeffentlich", v.gaesteOeffentlich], ["sitzwahlOffen", v.sitzwahlOffen]],
     highlights: (v) => [["highlights", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[1]).map(([icon, titel, text]) => ({ icon, titel, text: text || "" }))]],
     faq: (v) => [["faq", v.t.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [f, ...a] = b.split("\n"); return { f: f.trim(), a: a.join("\n").trim() }; })]],
     sponsoren: (v) => [["sponsoren", v.t.split("\n").map((z) => z.split("|").map((x) => x.trim())).filter((z) => z[0]).map(([name, url, logo]) => ({ name, url: url || "", logo: logo || "" }))]],

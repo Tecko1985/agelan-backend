@@ -156,8 +156,13 @@ const STANDARD = {
   sitzwahlOffen: true,
   gruppeHalteTage: 21,
   gruppeMaxSitze: 10,
+  // Zeitliche Grenzen für Reservierungsgruppen (siehe gruppeGrenze)
+  gruppenErlaubt: true,       // Gäste dürfen Gruppen gründen
+  gruppeVerlaengern: true,    // erneutes Vormerken verlängert die Haltefrist
+  gruppeMaxTage: 60,          // höchstens so lange ab Gründung (0 = ohne Grenze)
+  gruppeStichtagTage: 7,      // spätestens so viele Tage vor LAN-Beginn (-1 = aus)
 };
-const OEFFENTLICHE_EINSTELLUNGEN = ["seite", "highlights", "zahlung", "faq", "texte", "sponsoren", "gaesteOeffentlich", "sitzwahlOffen", "gruppeHalteTage", "gruppeMaxSitze"];
+const OEFFENTLICHE_EINSTELLUNGEN = ["seite", "highlights", "zahlung", "faq", "texte", "sponsoren", "gaesteOeffentlich", "sitzwahlOffen", "gruppeHalteTage", "gruppeMaxSitze", "gruppenErlaubt", "gruppeVerlaengern", "gruppeMaxTage", "gruppeStichtagTage"];
 
 // ---------------------------------------------------------------------------
 // Einstieg
@@ -850,13 +855,16 @@ const AKTIONEN = {
     const u = brauchtLogin(c);
     const lan = await aktiveLan(env);
     const e = await einstellungen(env);
+    if (e.gruppenErlaubt === false && u.rolle === "user") throw new F(409, "Reservierungsgruppen sind gerade nicht möglich.");
     const name = text(body.name, 30, "Gruppenname", true);
     if (name.length < 2) throw new F(400, "Der Gruppenname ist zu kurz.");
     if (await eins(env, "SELECT 1 FROM group_members WHERE user_id = ? AND lan_id = ?", u.id, lan.id)) throw new F(409, "Du bist schon in einer Gruppe.");
     if (await eins(env, "SELECT 1 FROM groups WHERE lan_id = ? AND name_key = ?", lan.id, name.toLowerCase())) throw new F(409, "Diesen Gruppennamen gibt es schon.");
     const jetzt = Date.now();
+    const ablauf = Math.min(jetzt + e.gruppeHalteTage * 864e5, gruppeGrenze(e, lan, jetzt));
+    if (ablauf <= jetzt) throw new F(409, "Für diese LAN können keine Reservierungsgruppen mehr gegründet werden – der Stichtag ist vorbei.");
     const r = await los(env, "INSERT INTO groups (lan_id, name, name_key, owner_id, code, ablauf, created_at) VALUES (?,?,?,?,?,?,?)",
-      lan.id, name, name.toLowerCase(), u.id, zufallsCode(6), jetzt + e.gruppeHalteTage * 864e5, jetzt);
+      lan.id, name, name.toLowerCase(), u.id, zufallsCode(6), ablauf, jetzt);
     const gid = r.meta.last_row_id;
     try {
       await los(env, "INSERT INTO group_members (group_id, user_id, lan_id, created_at) VALUES (?,?,?,?)", gid, u.id, lan.id, jetzt);
@@ -917,6 +925,9 @@ const AKTIONEN = {
     const g = await eigeneGruppe(c, u);
     const e = await einstellungen(env);
     const ids = [...new Set((Array.isArray(c.body.sitzIds) ? c.body.sitzIds : []).map(String))];
+    const glan = await eins(env, "SELECT * FROM lans WHERE id = ?", g.lan_id);
+    if (g.ablauf <= Date.now() && (e.gruppeVerlaengern === false || gruppeGrenze(e, glan, g.created_at) <= Date.now()))
+      throw new F(409, "Die Haltefrist eurer Gruppe ist abgelaufen. Plätze könnt ihr jetzt nur noch einzeln mit Ticket wählen.");
     const max = u.rolle === "admin" ? 500 : e.gruppeMaxSitze;
     if (ids.length > max) throw new F(400, "Eine Gruppe darf höchstens " + max + " Plätze vormerken.");
     const mitglieder = (await alle(env, "SELECT user_id FROM group_members WHERE group_id = ?", g.id)).map((m) => m.user_id);
@@ -932,8 +943,11 @@ const AKTIONEN = {
     }
     const stmts = [st(env, "UPDATE seats SET group_id = NULL WHERE group_id = ?", g.id)];
     for (const id of ids) stmts.push(st(env, "UPDATE seats SET group_id = ? WHERE id = ?", g.id, id));
-    // Wer neu vormerkt, verlängert die Haltefrist.
-    stmts.push(st(env, "UPDATE groups SET ablauf = MAX(ablauf, ?) WHERE id = ?", jetzt + e.gruppeHalteTage * 864e5, g.id));
+    // Wer neu vormerkt, verlängert die Haltefrist – sofern erlaubt und nur bis zur Grenze.
+    if (e.gruppeVerlaengern !== false) {
+      const neu = Math.min(Math.max(g.ablauf, jetzt + e.gruppeHalteTage * 864e5), gruppeGrenze(e, glan, g.created_at));
+      if (neu > g.ablauf) stmts.push(st(env, "UPDATE groups SET ablauf = ? WHERE id = ?", neu, g.id));
+    }
     await env.DB.batch(stmts);
     await protokoll(c, "gruppe-sitze", { gruppe: g.name, anzahl: ids.length });
     return { gruppe: await gruppeDetail(env, g.id, u.id) };
@@ -1144,6 +1158,22 @@ const AKTIONEN = {
       await env.DB.batch(stmts);
     }
     return { gruppe: await gruppeDetail(env, g.id, null, true) };
+  },
+
+  // Regeln auf bestehende Gruppen anwenden: Fristen nur kürzen, nie verlängern.
+  async adminGruppenFristen(c) {
+    const { env } = c;
+    brauchtAdmin(c);
+    const lan = await lanAusBody(c);
+    const e = await einstellungen(env);
+    const stmts = [];
+    for (const g of await alle(env, "SELECT id, ablauf, created_at FROM groups WHERE lan_id = ?", lan.id)) {
+      const neu = Math.min(g.ablauf, gruppeGrenze(e, lan, g.created_at));
+      if (neu < g.ablauf) stmts.push(st(env, "UPDATE groups SET ablauf = ? WHERE id = ?", neu, g.id));
+    }
+    if (stmts.length) await env.DB.batch(stmts);
+    await protokoll(c, "gruppen-fristen", { lan: lan.id, gekuerzt: stmts.length });
+    return { gekuerzt: stmts.length };
   },
 
   // ---------- Verwaltung: Ticketsorten ----------
@@ -1433,6 +1463,11 @@ const AKTIONEN = {
     // Links nur als http(s)/mailto speichern – kein javascript: o. Ä.
     if (key === "seite") w.socials = Object.fromEntries(Object.entries(w.socials || {}).map(([k, v]) => [k, sichereUrl(v)]));
     if (key === "zahlung") { w.paypalMe = sichereUrl(w.paypalMe); w.arten = { ...std.arten, ...(w.arten || {}) }; }
+    if (key === "gruppeHalteTage") w = Math.max(1, Math.min(365, Math.round(Number(w)) || 21));
+    if (key === "gruppeMaxSitze") w = Math.max(1, Math.min(200, Math.round(Number(w)) || 10));
+    if (key === "gruppeMaxTage") w = Math.max(0, Math.min(3650, Math.round(Number(w)) || 0));
+    if (key === "gruppeStichtagTage") w = Number.isFinite(Number(w)) && String(w) !== "" ? Math.max(-1, Math.min(365, Math.round(Number(w)))) : -1;
+    if (key === "gruppenErlaubt" || key === "gruppeVerlaengern") w = !!w;
     if (key === "netz") {
       w.portal = sichereUrl(w.portal);
       w.maxGeraete = Math.max(0, Math.min(20, Math.round(Number(w.maxGeraete)) || 0));
@@ -1717,6 +1752,17 @@ async function sitzSetzen(env, ticketId, userId, lanId, sitzId, durchOrga, istOr
   }
   // Der UNIQUE-Index auf seat_id fängt den Fall ab, dass jemand in derselben Millisekunde zugreift.
   await los(env, "UPDATE tickets SET seat_id = ? WHERE id = ?", sitzId, ticketId);
+}
+
+// Spätestes Ende einer Gruppe nach den Einstellungen (ms): Höchstdauer ab Gründung
+// und Stichtag vor LAN-Beginn. Infinity = keine Grenze.
+function gruppeGrenze(e, lan, erstellt) {
+  let grenze = Infinity;
+  const maxTage = Number(e.gruppeMaxTage) || 0;
+  if (maxTage > 0) grenze = Math.min(grenze, erstellt + maxTage * 864e5);
+  const stich = Number(e.gruppeStichtagTage);
+  if (lan && lan.start && Number.isFinite(stich) && stich >= 0) grenze = Math.min(grenze, berlinMs(lan.start, "00:00:00") - stich * 864e5);
+  return grenze;
 }
 
 async function eigeneGruppe(c, u) {
